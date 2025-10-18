@@ -372,7 +372,7 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
     status = 'grace_period';
     isInGoodStanding = true;
   } else if (!trialEndsAtDate && !currentPeriodEndsAtDate && !gracePeriodEndsAtDate) {
-    status = 'active';
+    status = 'pending';
     isInGoodStanding = true;
   } else {
     status = 'expired';

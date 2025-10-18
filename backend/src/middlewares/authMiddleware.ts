@@ -2,6 +2,10 @@ import { NextFunction, Request, Response } from 'express';
 import { authConfig } from '../constants/auth';
 import { verifyToken } from '../utils/tokenUtils';
 
+type RequestAuthPayload = Request extends { auth?: { payload: infer P } }
+  ? P
+  : ReturnType<typeof verifyToken>;
+
 const extractBearerToken = (authorizationHeader: string | undefined): string | null => {
   if (!authorizationHeader) {
     return null;
@@ -35,25 +39,32 @@ export const authenticateRequest = (
   try {
     const payload = verifyToken(token, authConfig.secret);
 
-    if (typeof payload.sub !== 'string' && typeof payload.sub !== 'number') {
+    if (typeof payload.sub !== 'string') {
       res.status(401).json({ error: 'Token inválido.' });
       return;
     }
 
-    const userId =
-      typeof payload.sub === 'number'
-        ? payload.sub
-        : Number.parseInt(payload.sub, 10);
+    const subject = payload.sub.trim();
+    if (subject === '') {
+      res.status(401).json({ error: 'Token inválido.' });
+      return;
+    }
+    const userId = Number.parseInt(subject, 10);
 
     if (!Number.isFinite(userId)) {
       res.status(401).json({ error: 'Token inválido.' });
       return;
     }
 
+    const normalizedPayload = {
+      ...payload,
+      sub: subject,
+    } as RequestAuthPayload;
+
     req.auth = {
       userId,
       email: typeof payload.email === 'string' ? payload.email : undefined,
-      payload,
+      payload: normalizedPayload,
     };
 
     next();

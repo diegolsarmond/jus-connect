@@ -2,6 +2,7 @@ import type { SupabaseSession } from "@supabase/supabase-js";
 
 export type SubscriptionStatus =
   | "active"
+  | "pending"
   | "trialing"
   | "inactive"
   | "grace_period"

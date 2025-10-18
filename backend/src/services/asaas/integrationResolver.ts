@@ -2,10 +2,10 @@ import pool from '../db';
 import AsaasClient, { AsaasClientConfig } from './asaasClient';
 import {
   ASAAS_DEFAULT_BASE_URLS,
-  AsaasEnvironment,
   normalizeAsaasBaseUrl,
   normalizeAsaasEnvironment,
 } from './urlNormalization';
+import type { AsaasEnvironment } from './urlNormalization';
 
 export type Queryable = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }>;
@@ -129,7 +129,20 @@ async function findScopedIntegration(
 
   const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
        FROM integration_api_keys i
-       LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
+       LEFT JOIN LATERAL (
+         SELECT c.id
+           FROM asaas_credentials c
+          WHERE c.integration_api_key_id = i.id
+            AND (c.idempresa IS NULL OR c.idempresa = $2)
+          ORDER BY CASE
+                     WHEN c.idempresa = $2 THEN 0
+                     WHEN c.idempresa IS NULL THEN 1
+                     ELSE 2
+                   END,
+                   c.updated_at DESC NULLS LAST,
+                   c.created_at DESC NULLS LAST
+          LIMIT 1
+       ) c ON TRUE
        WHERE ${where.join('\n         AND ')}
        ORDER BY ${orderClauses.join(', ')}, i.updated_at DESC
        LIMIT 20`;
@@ -147,19 +160,33 @@ async function findScopedIntegration(
 
 async function findLegacyIntegration(
   db: Queryable,
+  empresaId: number,
   environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
-  const params: unknown[] = [PROVIDER_FILTER];
+  const params: unknown[] = [PROVIDER_FILTER, empresaId];
   const where: string[] = ['i.active = TRUE', 'LOWER(TRIM(i.provider)) = $1'];
 
   if (environment) {
     params.push(environment);
-    where.push('i.environment = $2');
+    where.push('i.environment = $3');
   }
 
   const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
          FROM integration_api_keys i
-         LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
+         LEFT JOIN LATERAL (
+           SELECT c.id
+             FROM asaas_credentials c
+            WHERE c.integration_api_key_id = i.id
+              AND (c.idempresa IS NULL OR c.idempresa = $2)
+            ORDER BY CASE
+                       WHEN c.idempresa = $2 THEN 0
+                       WHEN c.idempresa IS NULL THEN 1
+                       ELSE 2
+                     END,
+                     c.updated_at DESC NULLS LAST,
+                     c.created_at DESC NULLS LAST
+            LIMIT 1
+         ) c ON TRUE
          WHERE ${where.join('\n           AND ')}
          ORDER BY i.updated_at DESC
          LIMIT 20`;
@@ -211,10 +238,10 @@ export async function resolveAsaasIntegration(
 
     console.warn('[Asaas] Nenhuma credencial global encontrada. Aplicando fallback legado.');
 
-    row = await findLegacyIntegration(db, normalizedEnvironment);
+    row = await findLegacyIntegration(db, empresaId, normalizedEnvironment);
 
     if (!row && normalizedEnvironment) {
-      row = await findLegacyIntegration(db);
+      row = await findLegacyIntegration(db, empresaId);
     }
 
     if (!row) {

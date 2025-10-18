@@ -487,6 +487,8 @@ function resolveSubscriptionStatusLabel(status: string | null): string | null {
   switch (status) {
     case "active":
       return "Assinatura ativa";
+    case "pending":
+      return "Assinatura pendente";
     case "trialing":
       return "Período de avaliação";
     case "grace_period":
@@ -768,7 +770,10 @@ function MeuPlanoContent() {
     () => resolveSubscriptionStatusLabel(subscriptionStatus),
     [subscriptionStatus],
   );
-  const isPaymentPending = subscriptionStatus === "past_due" || subscriptionStatus === "grace_period";
+  const isPaymentPending =
+    subscriptionStatus === "past_due" ||
+    subscriptionStatus === "grace_period" ||
+    subscriptionStatus === "pending";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -811,6 +816,23 @@ function MeuPlanoContent() {
       setSubscriptionId(storedId && storedId.trim().length > 0 ? storedId.trim() : null);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (rawSubscriptionStatus && rawSubscriptionStatus !== "pending") {
+      try {
+        window.localStorage.removeItem("subscriptionId");
+        window.localStorage.removeItem("customerId");
+      } catch (storageError) {
+        console.warn("Falha ao limpar identificadores de assinatura pendente", storageError);
+      }
+
+      setSubscriptionId((current) => (current !== null ? null : current));
+    }
+  }, [rawSubscriptionStatus]);
 
   const handleCancelSubscription = useCallback(async () => {
     if (!subscriptionId || !isSubscriptionActive) {

@@ -426,8 +426,19 @@ async function defaultClientFactory({
     const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
 
     const credentialLookup = await db.query(
-      'SELECT id FROM asaas_credentials WHERE integration_api_key_id = $1',
-      [integrationApiKeyId],
+      `SELECT id
+         FROM asaas_credentials
+        WHERE integration_api_key_id = $1
+          AND (idempresa IS NULL OR idempresa = $2)
+        ORDER BY CASE
+                   WHEN idempresa = $2 THEN 0
+                   WHEN idempresa IS NULL THEN 1
+                   ELSE 2
+                 END,
+                 updated_at DESC NULLS LAST,
+                 created_at DESC NULLS LAST
+        LIMIT 1`,
+      [integrationApiKeyId, flowEmpresaId],
     );
 
     let credentialId: number | null = null;

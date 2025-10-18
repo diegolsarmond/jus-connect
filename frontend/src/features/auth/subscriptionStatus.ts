@@ -61,6 +61,7 @@ export const evaluateSubscriptionAccess = (
   switch (subscription.status) {
     case "active":
     case "trialing":
+    case "pending":
       return { hasAccess: true, reason: null, graceDeadline: null };
     case "grace_period":
     case "past_due": {

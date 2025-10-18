@@ -39,7 +39,13 @@ import {
 } from "@/features/plans/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
-import { fetchFlows, tokenizeCard, type CardTokenPayload, type Flow } from "@/lib/flows";
+import {
+  fetchChargeDetails,
+  fetchFlows,
+  tokenizeCard,
+  type CardTokenPayload,
+  type Flow,
+} from "@/lib/flows";
 import {
   clearPersistedManagePlanSelection,
   getPersistedManagePlanSelection,
@@ -435,6 +441,12 @@ const ManagePlanPayment = () => {
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyChargeDetails, setHistoryChargeDetails] = useState<
+    Record<string, { invoiceUrl: string | null; boletoUrl: string | null }>
+  >({});
+  const [historyChargeLoading, setHistoryChargeLoading] = useState<Record<string, boolean>>({});
+  const [historyChargeErrors, setHistoryChargeErrors] = useState<Record<string, string>>({});
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [billingDataStatus, setBillingDataStatus] = useState<{ companyId: number | null; loaded: boolean }>(() => ({
     companyId: user?.empresa_id ?? null,
     loaded: !user?.empresa_id,
@@ -959,6 +971,10 @@ const ManagePlanPayment = () => {
   useEffect(() => {
     if (!selectedPlan) {
       setHistory([]);
+      setHistoryChargeDetails({});
+      setHistoryChargeLoading({});
+      setHistoryChargeErrors({});
+      setShowAllHistory(false);
       setHistoryError(null);
       setIsHistoryLoading(false);
       return;
@@ -978,6 +994,10 @@ const ManagePlanPayment = () => {
         const planFlows = flows.filter((flow) =>
           flow.descricao.toLowerCase().includes("assinatura"),
         );
+        setHistoryChargeDetails({});
+        setHistoryChargeLoading({});
+        setHistoryChargeErrors({});
+        setShowAllHistory(false);
         setHistory(planFlows);
       } catch (historyLoadError) {
         if (!isActive) {
@@ -999,6 +1019,97 @@ const ManagePlanPayment = () => {
       isActive = false;
     };
   }, [selectedPlan, historyReloadKey]);
+
+  useEffect(() => {
+    if (history.length === 0) {
+      setHistoryChargeDetails({});
+      setHistoryChargeLoading({});
+      setHistoryChargeErrors({});
+      setShowAllHistory(false);
+      return;
+    }
+
+    let isActive = true;
+
+    const loadChargeDetails = async () => {
+      const entries = history
+        .map((flow) => {
+          const id = typeof flow.id === "number" ? flow.id : Number.parseInt(`${flow.id}`, 10);
+          if (!Number.isFinite(id)) {
+            return null;
+          }
+          return { id: id as number, key: `${flow.id}` };
+        })
+        .filter((value): value is { id: number; key: string } => Boolean(value));
+
+      if (entries.length === 0) {
+        return;
+      }
+
+      setHistoryChargeLoading((previous) => {
+        const next = { ...previous };
+        for (const entry of entries) {
+          next[entry.key] = true;
+        }
+        return next;
+      });
+
+      setHistoryChargeErrors((previous) => {
+        const next = { ...previous };
+        for (const entry of entries) {
+          delete next[entry.key];
+        }
+        return next;
+      });
+
+      await Promise.all(
+        entries.map(async ({ id, key }) => {
+          try {
+            const charge = await fetchChargeDetails(id);
+            if (!isActive) {
+              return;
+            }
+            setHistoryChargeDetails((previous) => ({
+              ...previous,
+              [key]: {
+                invoiceUrl: charge?.invoiceUrl ?? null,
+                boletoUrl: charge?.boletoUrl ?? null,
+              },
+            }));
+          } catch (error) {
+            if (!isActive) {
+              return;
+            }
+            setHistoryChargeDetails((previous) => ({
+              ...previous,
+              [key]: { invoiceUrl: null, boletoUrl: null },
+            }));
+            setHistoryChargeErrors((previous) => ({
+              ...previous,
+              [key]:
+                error instanceof Error
+                  ? error.message
+                  : "Não foi possível carregar a fatura dessa cobrança.",
+            }));
+          } finally {
+            if (!isActive) {
+              return;
+            }
+            setHistoryChargeLoading((previous) => ({
+              ...previous,
+              [key]: false,
+            }));
+          }
+        }),
+      );
+    };
+
+    void loadChargeDetails();
+
+    return () => {
+      isActive = false;
+    };
+  }, [history]);
 
   useEffect(() => {
     if (paymentMethod !== "cartao") {
@@ -1046,8 +1157,13 @@ const ManagePlanPayment = () => {
       return timeB - timeA;
     });
 
+    if (showAllHistory) {
+      return sorted;
+    }
+
     return sorted.slice(0, 5);
-  }, [history]);
+  }, [history, showAllHistory]);
+  const historyHasMore = history.length > 5;
 
   const cadenceLabel = pricingMode === "anual" ? "ano" : "mês";
   const alternateCadence = pricingMode === "anual" ? "mês" : "ano";
@@ -1156,20 +1272,31 @@ const ManagePlanPayment = () => {
     [toast],
   );
 
-  const handleOpenBoleto = useCallback(() => {
-    if (!boletoLink) {
-      toast({
-        title: "Boleto indisponível",
-        description: "O Asaas ainda não disponibilizou o boleto para download.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleOpenLink = useCallback(
+    (url: string | null, options?: { title?: string; description?: string }) => {
+      if (!url) {
+        toast({
+          title: options?.title ?? "Documento indisponível",
+          description:
+            options?.description ?? "O Asaas ainda não disponibilizou o documento para download.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (typeof window !== "undefined") {
-      window.open(boletoLink, "_blank", "noopener,noreferrer");
-    }
-  }, [boletoLink, toast]);
+      if (typeof window !== "undefined") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    [toast],
+  );
+
+  const handleOpenBoleto = useCallback(() => {
+    handleOpenLink(boletoLink, {
+      title: "Boleto indisponível",
+      description: "O Asaas ainda não disponibilizou o boleto para download.",
+    });
+  }, [boletoLink, handleOpenLink]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedPlan) {
@@ -2067,30 +2194,108 @@ const ManagePlanPayment = () => {
                   Nenhuma cobrança de plano foi encontrada nos registros recentes.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {planPaymentHistory.map((flow) => (
-                    <div
-                      key={flow.id}
-                      className="rounded-2xl border border-border/60 bg-white/80 p-4 shadow-sm"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-foreground">{flow.descricao}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Vencimento {formatDateLabel(flow.vencimento)} • {currencyFormatter.format(flow.valor)}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="rounded-full border-primary/30 text-primary">
-                          {flowStatusLabels[flow.status]}
-                        </Badge>
-                      </div>
-                      {flow.pagamento && (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Pago em {formatDateLabel(flow.pagamento)}
-                        </p>
-                      )}
+                <div className="space-y-4">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-fixed border-collapse text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-medium uppercase text-muted-foreground">
+                          <th className="px-3 py-2 font-medium">Descrição</th>
+                          <th className="px-3 py-2 font-medium">Vencimento</th>
+                          <th className="px-3 py-2 font-medium">Valor</th>
+                          <th className="px-3 py-2 font-medium">Status</th>
+                          <th className="px-3 py-2 font-medium">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {planPaymentHistory.map((flow) => {
+                          const flowKey = `${flow.id}`;
+                          const chargeDetails = historyChargeDetails[flowKey];
+                          const isChargeLoading = historyChargeLoading[flowKey];
+                          const chargeError = historyChargeErrors[flowKey];
+                          const documentUrl = chargeDetails?.invoiceUrl ?? chargeDetails?.boletoUrl ?? null;
+                          const documentLabel = chargeDetails?.invoiceUrl
+                            ? "fatura"
+                            : chargeDetails?.boletoUrl
+                              ? "boleto"
+                              : "documento";
+                          const capitalizedDocumentLabel = `${documentLabel.charAt(0).toUpperCase()}${documentLabel.slice(1)}`;
+
+                          return (
+                            <tr key={flow.id} className="border-b border-border/60 last:border-b-0">
+                              <td className="px-3 py-3 align-top">
+                                <div className="space-y-1">
+                                  <p className="font-medium text-foreground">{flow.descricao}</p>
+                                  {flow.pagamento && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Pago em {formatDateLabel(flow.pagamento)}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <p className="text-sm text-foreground">{formatDateLabel(flow.vencimento)}</p>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <p className="text-sm text-foreground">{currencyFormatter.format(flow.valor)}</p>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <Badge variant="outline" className="rounded-full border-primary/30 text-primary">
+                                  {flowStatusLabels[flow.status]}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                {isChargeLoading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                ) : chargeError ? (
+                                  <p className="text-xs text-destructive">{chargeError}</p>
+                                ) : (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleOpenLink(documentUrl, {
+                                          title: `${capitalizedDocumentLabel} indisponível`,
+                                          description: `O Asaas ainda não disponibilizou o ${documentLabel} para download.`,
+                                        })
+                                      }
+                                      disabled={!documentUrl}
+                                    >
+                                      <Receipt className="mr-2 h-4 w-4" /> Abrir
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleCopy(documentUrl)}
+                                      disabled={!documentUrl}
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                      <span className="sr-only">Copiar link</span>
+                                    </Button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {historyHasMore && (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="px-0"
+                        onClick={() => setShowAllHistory((previous) => !previous)}
+                      >
+                        {showAllHistory ? "Ver menos" : "Ver tudo"}
+                      </Button>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </CardContent>
