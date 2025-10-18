@@ -8,7 +8,6 @@ import {
   concluirTarefa,
   deleteTarefa,
 } from '../controllers/tarefaController';
-import { ensureAuthenticatedEmpresa } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const router = Router();
 
@@ -87,7 +86,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Tarefa'
  */
-router.get('/tarefas', ensureAuthenticatedEmpresa, listTarefas);
+router.get('/tarefas', listTarefas);
 
 /**
  * @swagger
@@ -111,7 +110,7 @@ router.get('/tarefas', ensureAuthenticatedEmpresa, listTarefas);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.get('/tarefas/:id', ensureAuthenticatedEmpresa, getTarefaById);
+router.get('/tarefas/:id', getTarefaById);
 
 /**
  * @swagger
@@ -144,7 +143,7 @@ router.get('/tarefas/:id', ensureAuthenticatedEmpresa, getTarefaById);
  *       404:
  *         description: Responsável não encontrado
  */
-router.get('/tarefas/:id/responsavel', ensureAuthenticatedEmpresa, getResponsavelByTarefa);
+router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
 
 /**
  * @swagger
@@ -166,7 +165,7 @@ router.get('/tarefas/:id/responsavel', ensureAuthenticatedEmpresa, getResponsave
  *             schema:
  *               $ref: '#/components/schemas/Tarefa'
  */
-router.post('/tarefas', ensureAuthenticatedEmpresa, createTarefa);
+router.post('/tarefas', createTarefa);
 
 /**
  * @swagger
@@ -196,7 +195,7 @@ router.post('/tarefas', ensureAuthenticatedEmpresa, createTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.put('/tarefas/:id', ensureAuthenticatedEmpresa, updateTarefa);
+router.put('/tarefas/:id', updateTarefa);
 
 /**
  * @swagger
@@ -220,7 +219,7 @@ router.put('/tarefas/:id', ensureAuthenticatedEmpresa, updateTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.patch('/tarefas/:id/concluir', ensureAuthenticatedEmpresa, concluirTarefa);
+router.patch('/tarefas/:id/concluir', concluirTarefa);
 
 /**
  * @swagger
@@ -240,6 +239,6 @@ router.patch('/tarefas/:id/concluir', ensureAuthenticatedEmpresa, concluirTarefa
  *       404:
  *         description: Tarefa não encontrada
  */
-router.delete('/tarefas/:id', ensureAuthenticatedEmpresa, deleteTarefa);
+router.delete('/tarefas/:id', deleteTarefa);
 
 export default router;

@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 export const WebhookInfo = () => {
   const { toast } = useToast();
   
-  const webhookUrl = `${window.location.origin}/api/webhooks/waha`;
+  const webhookUrl = `${window.location.origin}/api/webhook/waha`;
   
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);

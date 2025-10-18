@@ -42,7 +42,6 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -77,26 +76,15 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
   };
 
   const sendAttachment = async (file: File, type: MessageType = "image") => {
+    const objectUrl = URL.createObjectURL(file);
+    const attachment: MessageAttachment = {
+      id: `upload-${Date.now()}`,
+      type,
+      url: objectUrl,
+      name: file.name,
+    };
     setIsSending(true);
     try {
-      const buffer = await file.arrayBuffer();
-      let binary = "";
-      const bytes = new Uint8Array(buffer);
-      const chunkSize = 0x8000;
-      for (let index = 0; index < bytes.length; index += chunkSize) {
-        const chunk = bytes.subarray(index, index + chunkSize);
-        binary += String.fromCharCode(...chunk);
-      }
-      const base64 = btoa(binary);
-      const mimeType = file.type || "application/octet-stream";
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      const attachment: MessageAttachment = {
-        id: `upload-${Date.now()}`,
-        type,
-        url: dataUrl,
-        name: file.name,
-        mimeType: file.type || undefined,
-      };
       await onSend({ content: file.name, type, attachments: [attachment] });
       setShowAttachments(false);
     } finally {
@@ -153,14 +141,6 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
     }
   };
 
-  const handleDocumentInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      void sendAttachment(file, "file");
-      event.target.value = "";
-    }
-  };
-
   const handleAudioInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -195,7 +175,10 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
       {
         icon: <FileText size={18} aria-hidden="true" />, // purely decorativo
         label: "Documento PDF",
-        action: () => documentInputRef.current?.click(),
+        action: () =>
+          setValue((current) =>
+            `${current}${current && !current.endsWith(" ") ? " " : ""}[documento anexado]`,
+          ),
       },
       {
         icon: <LinkIcon size={18} aria-hidden="true" />, // purely decorativo
@@ -295,13 +278,6 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
         accept="image/*"
         style={{ display: "none" }}
         onChange={handleFileInputChange}
-      />
-      <input
-        ref={documentInputRef}
-        type="file"
-        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        style={{ display: "none" }}
-        onChange={handleDocumentInputChange}
       />
       <input
         ref={audioInputRef}

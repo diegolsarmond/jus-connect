@@ -25,9 +25,6 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     security_two_factor BOOLEAN NOT NULL DEFAULT FALSE,
     security_login_alerts BOOLEAN NOT NULL DEFAULT FALSE,
     security_device_approval BOOLEAN NOT NULL DEFAULT FALSE,
-    security_two_factor_secret TEXT,
-    security_two_factor_activated_at TIMESTAMPTZ,
-    security_two_factor_backup_codes TEXT[] NOT NULL DEFAULT ARRAY[]::text[],
     avatar_url TEXT,
     member_since TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -71,8 +68,6 @@ CREATE TABLE IF NOT EXISTS public.user_profile_sessions (
     location TEXT,
     last_activity TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    is_approved BOOLEAN NOT NULL DEFAULT FALSE,
-    approved_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     revoked_at TIMESTAMPTZ
 );

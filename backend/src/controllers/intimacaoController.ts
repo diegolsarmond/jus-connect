@@ -23,9 +23,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
     const result = await pool.query(
@@ -70,7 +68,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Failed to list intimações', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -95,9 +93,7 @@ export const archiveIntimacaoHandler = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
     }
 
     const result = await pool.query(
@@ -119,7 +115,7 @@ export const archiveIntimacaoHandler = async (req: Request, res: Response) => {
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to archive intimação', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -144,9 +140,7 @@ export const markIntimacaoAsReadHandler = async (req: Request, res: Response) =>
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
     }
 
     const usuarioId = Number(req.auth.userId);
@@ -178,7 +172,7 @@ export const markIntimacaoAsReadHandler = async (req: Request, res: Response) =>
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to mark intimação as read', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -268,16 +262,14 @@ export const listIntimacaoOabMonitoradasHandler = async (req: Request, res: Resp
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
     const monitors = await listIntimacaoOabMonitors(empresaId);
     return res.json(monitors);
   } catch (error) {
     console.error('Failed to list monitored OABs for intimações', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -299,7 +291,7 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
 
     if (empresaId === null) {
       return res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -357,7 +349,7 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
     }
   } catch (error) {
     console.error('Failed to create monitored OAB for intimações', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -382,9 +374,7 @@ export const deleteIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
     }
 
     const deleted = await deleteIntimacaoOabMonitor(empresaId, monitorId);
@@ -396,6 +386,6 @@ export const deleteIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete monitored OAB for intimações', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

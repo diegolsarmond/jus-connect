@@ -8,11 +8,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { getApiBaseUrl } from "@/lib/api";
 import { DEFAULT_TIMEOUT_MS, LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
-import type { SupabaseSession } from "@supabase/supabase-js";
-import { ApiError, fetchCurrentUser, loginRequest } from "./api";
+import { ApiError, fetchCurrentUser, loginRequest, refreshTokenRequest } from "./api";
 import { sanitizeModuleList } from "./moduleUtils";
 import type {
   AuthSubscription,
@@ -26,6 +24,7 @@ interface StoredAuthData {
   token: string;
   user?: AuthUser;
   timestamp: number;
+  expiresAt?: number;
 }
 
 interface AuthContextValue {
@@ -236,6 +235,79 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
   } satisfies AuthUser;
 };
 
+const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+const TOKEN_REFRESH_RETRY_DELAY_MS = 30 * 1000;
+
+const decodeBase64Url = (value: string): string | null => {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4;
+  const padded = normalized + "=".repeat((4 - padding) % 4);
+
+  if (typeof atob === "function") {
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    if (typeof TextDecoder === "function") {
+      return new TextDecoder().decode(bytes);
+    }
+
+    let result = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      result += String.fromCharCode(bytes[index]);
+    }
+    return result;
+  }
+
+  const globalBuffer = (globalThis as { Buffer?: { from: (data: string, encoding: string) => { toString: (encoding: string) => string } } }).Buffer;
+  if (globalBuffer) {
+    try {
+      return globalBuffer.from(padded, "base64").toString("utf-8");
+    } catch (error) {
+      console.warn("Falha ao decodificar base64 utilizando Buffer", error);
+    }
+  }
+
+  return null;
+};
+
+const decodeTokenExpiration = (token: string): number | null => {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const decoded = decodeBase64Url(parts[1]);
+    if (!decoded) {
+      return null;
+    }
+
+    const payload = JSON.parse(decoded) as { exp?: unknown };
+    if (typeof payload.exp === "number" && Number.isFinite(payload.exp)) {
+      return payload.exp * 1000;
+    }
+  } catch (error) {
+    console.warn("Falha ao decodificar expiração do token", error);
+  }
+
+  return null;
+};
+
+const resolveTokenExpiration = (
+  token: string,
+  expiresIn?: number,
+  baseTimestamp = Date.now(),
+): number | null => {
+  if (typeof expiresIn === "number" && Number.isFinite(expiresIn) && expiresIn > 0) {
+    return baseTimestamp + expiresIn * 1000;
+  }
+
+  return decodeTokenExpiration(token);
+};
+
 const readLastActivityTimestamp = (): number | null => {
   if (typeof window === "undefined") {
     return null;
@@ -277,13 +349,15 @@ const readStoredAuth = (): StoredAuthData | null => {
 
     const sanitizedUser = sanitizeAuthUser(parsed.user ?? null) ?? undefined;
 
+    const expiresAt =
+      typeof parsed.expiresAt === "number" && Number.isFinite(parsed.expiresAt)
+        ? parsed.expiresAt
+        : decodeTokenExpiration(parsed.token) ?? undefined;
+
     return {
-      token: parsed.token,
+      ...parsed,
       user: sanitizedUser,
-      timestamp:
-        typeof parsed.timestamp === "number" && Number.isFinite(parsed.timestamp)
-          ? parsed.timestamp
-          : Date.now(),
+      expiresAt,
     };
   } catch (error) {
     console.warn("Failed to parse stored auth data", error);
@@ -302,14 +376,13 @@ const writeStoredAuth = (data: StoredAuthData | null) => {
   }
 
   const user = sanitizeAuthUser(data.user ?? null) ?? undefined;
-
+  const expiresAt =
+    typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
+      ? data.expiresAt
+      : undefined;
   window.localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({
-      token: data.token,
-      user,
-      timestamp: data.timestamp,
-    }),
+    JSON.stringify({ ...data, user, expiresAt }),
   );
 };
 
@@ -337,12 +410,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
   const tokenRef = useRef<string | null>(null);
   const userRef = useRef<AuthUser | null>(null);
   const hasUnauthorizedErrorRef = useRef(false);
   const apiBaseUrlRef = useRef(getApiBaseUrl());
-  const logoutRef = useRef<() => void>(() => {});
-  const isSyncingSessionRef = useRef(false);
+  const refreshTimeoutIdRef = useRef<number>();
+  const isRefreshingTokenRef = useRef(false);
+  const scheduleRefreshCallbackRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     tokenRef.current = token;
@@ -352,13 +427,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     userRef.current = user;
   }, [user]);
 
-  const performLocalLogout = useCallback(() => {
+  const clearRefreshTimeout = useCallback(() => {
+    if (typeof window === "undefined") {
+      refreshTimeoutIdRef.current = undefined;
+      return;
+    }
+
+    if (refreshTimeoutIdRef.current !== undefined) {
+      window.clearTimeout(refreshTimeoutIdRef.current);
+      refreshTimeoutIdRef.current = undefined;
+    }
+  }, []);
+
+  const handleLogout = useCallback(() => {
     setUser(null);
     setToken(null);
+    setSessionExpiresAt(null);
     setIsLoading(false);
     hasUnauthorizedErrorRef.current = false;
     tokenRef.current = null;
     userRef.current = null;
+    clearRefreshTimeout();
     writeStoredAuth(null);
     if (typeof window !== "undefined") {
       try {
@@ -367,74 +456,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn("Falha ao limpar registro de atividade", error);
       }
     }
-  }, []);
+  }, [clearRefreshTimeout]);
 
-  const syncUserFromToken = useCallback(
-    async (accessToken: string) => {
-      const currentUser = await fetchCurrentUser(accessToken);
-      const sanitizedUser = sanitizeAuthUser(currentUser) ?? currentUser;
-      setUser(sanitizedUser);
-      userRef.current = sanitizedUser;
-      writeStoredAuth({
-        token: accessToken,
-        user: sanitizedUser,
-        timestamp: Date.now(),
-      });
-      return sanitizedUser;
-    },
-    [],
-  );
-
-  const applySession = useCallback(
-    async (session: SupabaseSession | null, fallbackUser?: AuthUser | null) => {
-      if (!session?.access_token) {
-        performLocalLogout();
-        return;
-      }
-
-      const lastActivity = readLastActivityTimestamp();
-      if (lastActivity !== null && Date.now() - lastActivity >= DEFAULT_TIMEOUT_MS) {
-        await supabase.auth.signOut().catch(() => {});
-        performLocalLogout();
-        return;
-      }
-
-      const sanitizedFallback = fallbackUser ? sanitizeAuthUser(fallbackUser) ?? fallbackUser : null;
-
-      tokenRef.current = session.access_token;
-      setToken(session.access_token);
-
-      if (sanitizedFallback) {
-        setUser(sanitizedFallback);
-        userRef.current = sanitizedFallback;
-      }
-
-      writeStoredAuth({
-        token: session.access_token,
-        user: userRef.current ?? undefined,
-        timestamp: Date.now(),
-      });
-
-      isSyncingSessionRef.current = true;
-      try {
-        await syncUserFromToken(session.access_token);
-      } catch (error) {
-        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-          performLocalLogout();
-        } else {
-          console.warn("Failed to synchronize user from Supabase session", error);
-        }
-      } finally {
-        isSyncingSessionRef.current = false;
-        setIsLoading(false);
-      }
-    },
-    [performLocalLogout, syncUserFromToken],
-  );
+  const logoutRef = useRef(handleLogout);
+  useEffect(() => {
+    logoutRef.current = handleLogout;
+  }, [handleLogout]);
 
   useEffect(() => {
-    logoutRef.current = performLocalLogout;
-  }, [performLocalLogout]);
+    const stored = readStoredAuth();
+    if (!stored) {
+      setIsLoading(false);
+      return;
+    }
+
+    setToken(stored.token);
+    tokenRef.current = stored.token;
+    const initialExpiresAt = stored.expiresAt ?? decodeTokenExpiration(stored.token);
+    setSessionExpiresAt(initialExpiresAt ?? null);
+    if (stored.user) {
+      setUser(stored.user);
+    }
+
+    const validateToken = async () => {
+      try {
+        const currentUser = await fetchCurrentUser(stored.token);
+        const sanitizedUser = sanitizeAuthUser(currentUser) ?? currentUser;
+        setUser(sanitizedUser);
+        userRef.current = sanitizedUser;
+        const persistedExpiresAt = stored.expiresAt ?? decodeTokenExpiration(stored.token);
+        writeStoredAuth({
+          token: stored.token,
+          user: sanitizedUser,
+          timestamp: Date.now(),
+          expiresAt: persistedExpiresAt ?? undefined,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          console.warn("Stored authentication token is no longer valid", error);
+          handleLogout();
+          return;
+        }
+
+        console.warn("Failed to validate stored token", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void validateToken();
+  }, [handleLogout]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.fetch !== "function") {
@@ -483,87 +554,164 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  const refreshAuthToken = useCallback(async () => {
+    if (!tokenRef.current || isRefreshingTokenRef.current) {
+      return;
+    }
+
+    const lastActivity = readLastActivityTimestamp();
+    const now = Date.now();
+
+    if (lastActivity !== null && now - lastActivity >= DEFAULT_TIMEOUT_MS) {
+      handleLogout();
+      return;
+    }
+
+    isRefreshingTokenRef.current = true;
+    let handledScheduling = false;
+
+    try {
+      const response = await refreshTokenRequest(tokenRef.current);
+      const refreshTimestamp = Date.now();
+      const newExpiresAt = resolveTokenExpiration(response.token, response.expiresIn, refreshTimestamp);
+
+      setToken(response.token);
+      tokenRef.current = response.token;
+      setSessionExpiresAt(newExpiresAt ?? null);
+      writeStoredAuth({
+        token: response.token,
+        user: userRef.current ?? undefined,
+        timestamp: refreshTimestamp,
+        expiresAt: newExpiresAt ?? undefined,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        console.warn("Token de autenticação expirado durante a renovação", error);
+        handleLogout();
+        handledScheduling = true;
+      } else {
+        console.error("Falha ao renovar token de autenticação", error);
+        if (typeof window !== "undefined") {
+          const retryDelay = (() => {
+            if (sessionExpiresAt === null) {
+              return TOKEN_REFRESH_RETRY_DELAY_MS;
+            }
+            const timeUntilExpiration = sessionExpiresAt - Date.now();
+            if (!Number.isFinite(timeUntilExpiration) || timeUntilExpiration <= 1_000) {
+              return 1_000;
+            }
+            return Math.max(
+              1_000,
+              Math.min(TOKEN_REFRESH_RETRY_DELAY_MS, timeUntilExpiration - 1_000),
+            );
+          })();
+          clearRefreshTimeout();
+          refreshTimeoutIdRef.current = window.setTimeout(() => {
+            void refreshAuthToken();
+          }, retryDelay);
+          handledScheduling = true;
+        }
+      }
+    } finally {
+      isRefreshingTokenRef.current = false;
+      if (!handledScheduling) {
+        scheduleRefreshCallbackRef.current();
+      }
+    }
+  }, [handleLogout, clearRefreshTimeout, sessionExpiresAt]);
+
+  const scheduleTokenRefresh = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    clearRefreshTimeout();
+
+    if (!tokenRef.current || !sessionExpiresAt) {
+      return;
+    }
+
+    const now = Date.now();
+    const refreshAt = sessionExpiresAt - TOKEN_REFRESH_THRESHOLD_MS;
+    const delay = refreshAt - now;
+
+    if (delay <= 0) {
+      void refreshAuthToken();
+      return;
+    }
+
+    refreshTimeoutIdRef.current = window.setTimeout(() => {
+      void refreshAuthToken();
+    }, delay);
+  }, [sessionExpiresAt, clearRefreshTimeout, refreshAuthToken]);
+
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_OUT") {
-        performLocalLogout();
-        return;
-      }
+    scheduleRefreshCallbackRef.current = scheduleTokenRefresh;
+  }, [scheduleTokenRefresh]);
 
-      if (event === "SIGNED_IN" && isSyncingSessionRef.current) {
-        return;
-      }
+  useEffect(() => {
+    scheduleTokenRefresh();
+    return () => {
+      clearRefreshTimeout();
+    };
+  }, [scheduleTokenRefresh, clearRefreshTimeout]);
 
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        await applySession(session);
-      }
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    const response = await loginRequest(credentials);
+    const loginTimestamp = Date.now();
+    const expiresAt = resolveTokenExpiration(response.token, response.expiresIn, loginTimestamp);
+    const sanitizedUser = sanitizeAuthUser(response.user) ?? response.user;
+    setToken(response.token);
+    setUser(sanitizedUser);
+    tokenRef.current = response.token;
+    userRef.current = sanitizedUser;
+    setSessionExpiresAt(expiresAt ?? null);
+    writeStoredAuth({
+      token: response.token,
+      user: sanitizedUser,
+      timestamp: loginTimestamp,
+      expiresAt: expiresAt ?? undefined,
     });
 
-    return () => {
-      data.subscription.unsubscribe();
-    };
-  }, [applySession, performLocalLogout]);
-
-  useEffect(() => {
-    const initialize = async () => {
-      const stored = readStoredAuth();
-
-      if (stored?.user) {
-        setUser(stored.user);
-        userRef.current = stored.user;
-      }
-
-      if (stored?.token) {
-        setToken(stored.token);
-        tokenRef.current = stored.token;
-      }
-
+    if (!sanitizedUser?.subscription) {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          await applySession(data.session, stored?.user ?? null);
-          return;
-        }
-
-        if (stored?.token) {
-          try {
-            await syncUserFromToken(stored.token);
-          } catch {
-            performLocalLogout();
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to initialize Supabase session", error);
-      } finally {
-        setIsLoading(false);
+        const refreshedUser = await fetchCurrentUser(response.token);
+        const normalizedRefreshedUser = sanitizeAuthUser(refreshedUser) ?? refreshedUser;
+        setUser(normalizedRefreshedUser);
+        userRef.current = normalizedRefreshedUser;
+        writeStoredAuth({
+          token: response.token,
+          user: normalizedRefreshedUser,
+          timestamp: Date.now(),
+          expiresAt: expiresAt ?? undefined,
+        });
+      } catch (subscriptionError) {
+        console.warn("Failed to load subscription details after login", subscriptionError);
       }
-    };
+    }
 
-    void initialize();
-  }, [applySession, performLocalLogout, syncUserFromToken]);
-
-  const login = useCallback(
-    async (credentials: LoginCredentials) => {
-      const response = await loginRequest(credentials);
-      const sanitizedUser = sanitizeAuthUser(response.user) ?? response.user;
-      await applySession(response.session, sanitizedUser);
-      return { ...response, user: sanitizedUser };
-    },
-    [applySession],
-  );
+    return { ...response, user: sanitizedUser };
+  }, []);
 
   const logout = useCallback(() => {
-    void supabase.auth.signOut().catch(() => {});
-    performLocalLogout();
-  }, [performLocalLogout]);
+    handleLogout();
+  }, [handleLogout]);
 
   const refreshUser = useCallback(async () => {
-    if (!tokenRef.current) {
-      throw new Error("Token de autenticação inexistente.");
+    const currentUser = await fetchCurrentUser(tokenRef.current ?? undefined);
+    const sanitizedUser = sanitizeAuthUser(currentUser) ?? currentUser;
+    setUser(sanitizedUser);
+    userRef.current = sanitizedUser;
+    if (tokenRef.current) {
+      writeStoredAuth({
+        token: tokenRef.current,
+        user: sanitizedUser,
+        timestamp: Date.now(),
+        expiresAt: sessionExpiresAt ?? undefined,
+      });
     }
-    const sanitizedUser = await syncUserFromToken(tokenRef.current);
     return sanitizedUser;
-  }, [syncUserFromToken]);
+  }, [sessionExpiresAt]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

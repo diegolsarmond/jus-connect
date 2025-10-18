@@ -9,8 +9,6 @@ interface SessionsListProps {
   sessions: UserSession[];
   onRevokeSession?: (sessionId: string) => Promise<void> | void;
   onRevokeAllSessions?: () => Promise<void> | void;
-  onApproveDevice?: (sessionId: string) => Promise<void> | void;
-  onRevokeDeviceApproval?: (sessionId: string) => Promise<void> | void;
   isLoading?: boolean;
   error?: string | null;
   onReload?: () => Promise<void> | void;
@@ -48,15 +46,12 @@ export function SessionsList({
   sessions,
   onRevokeSession,
   onRevokeAllSessions,
-  onApproveDevice,
-  onRevokeDeviceApproval,
   isLoading,
   error,
   onReload,
 }: SessionsListProps) {
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [isRevokingAll, setIsRevokingAll] = useState(false);
-  const [pendingApprovalId, setPendingApprovalId] = useState<string | null>(null);
 
   const activeSessions = useMemo(() => sessions.filter((session) => session.isActive), [sessions]);
   const inactiveSessions = useMemo(() => sessions.filter((session) => !session.isActive), [sessions]);
@@ -87,37 +82,10 @@ export function SessionsList({
     }
   };
 
-  const handleApproveDevice = async (sessionId: string) => {
-    if (!onApproveDevice) {
-      return;
-    }
-
-    try {
-      setPendingApprovalId(sessionId);
-      await onApproveDevice(sessionId);
-    } finally {
-      setPendingApprovalId(null);
-    }
-  };
-
-  const handleRevokeDeviceApproval = async (sessionId: string) => {
-    if (!onRevokeDeviceApproval) {
-      return;
-    }
-
-    try {
-      setPendingApprovalId(sessionId);
-      await onRevokeDeviceApproval(sessionId);
-    } finally {
-      setPendingApprovalId(null);
-    }
-  };
-
   const renderSessionCard = (session: UserSession) => {
     const DeviceIcon = getDeviceIcon(session.device);
     const isCurrent = session.isCurrent === true;
     const isPending = pendingSessionId === session.id;
-    const isApprovalPending = pendingApprovalId === session.id;
 
     return (
       <Card
@@ -144,16 +112,6 @@ export function SessionsList({
                   {isCurrent && (
                     <Badge variant="outline" className="border-primary text-primary">
                       Sessão Atual
-                    </Badge>
-                  )}
-
-                  {session.isApproved ? (
-                    <Badge variant="outline" className="border-success text-success">
-                      Dispositivo aprovado
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="border-warning text-warning">
-                      Aprovação pendente
                     </Badge>
                   )}
                 </div>
@@ -184,28 +142,6 @@ export function SessionsList({
                 disabled={isPending || isRevokingAll}
               >
                 {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Revogar"}
-              </Button>
-            )}
-
-            {onApproveDevice && !session.isApproved && session.isActive && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleApproveDevice(session.id)}
-                disabled={isApprovalPending}
-              >
-                {isApprovalPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aprovar dispositivo"}
-              </Button>
-            )}
-
-            {onRevokeDeviceApproval && session.isApproved && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleRevokeDeviceApproval(session.id)}
-                disabled={isApprovalPending}
-              >
-                {isApprovalPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Revogar aprovação"}
               </Button>
             )}
           </div>

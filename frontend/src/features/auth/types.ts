@@ -1,5 +1,3 @@
-import type { SupabaseSession } from "@supabase/supabase-js";
-
 export type SubscriptionStatus =
   | "active"
   | "pending"
@@ -44,5 +42,4 @@ export interface LoginResponse {
   token: string;
   expiresIn?: number;
   user: AuthUser;
-  session: SupabaseSession;
 }

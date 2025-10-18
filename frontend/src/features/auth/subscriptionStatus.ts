@@ -1,4 +1,3 @@
-import { SUBSCRIPTION_DEFAULT_GRACE_DAYS } from "@/config/subscription";
 import type { AuthSubscription } from "./types";
 
 const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
@@ -27,12 +26,12 @@ export const resolveGraceDeadline = (subscription: AuthSubscription | null): Dat
 
   const periodEnd = parseTimestamp(subscription.currentPeriodEnd);
   if (periodEnd !== null) {
-    return new Date(addDays(periodEnd, SUBSCRIPTION_DEFAULT_GRACE_DAYS));
+    return new Date(addDays(periodEnd, 10));
   }
 
   const trialEnd = parseTimestamp(subscription.trialEndsAt);
   if (trialEnd !== null) {
-    return new Date(addDays(trialEnd, SUBSCRIPTION_DEFAULT_GRACE_DAYS));
+    return new Date(addDays(trialEnd, 10));
   }
 
   return null;

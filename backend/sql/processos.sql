@@ -21,9 +21,6 @@ CREATE TABLE IF NOT EXISTS public.processos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_processos_cliente_id ON public.processos(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_processos_idempresa
-  ON public.processos(idempresa)
-  WHERE idempresa IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.processo_advogados (
   id SERIAL PRIMARY KEY,

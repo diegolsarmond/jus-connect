@@ -17,9 +17,6 @@ export interface ChatOverview {
   avatar?: string;
   picture?: string; // Adicionando picture que vem da API
   participants?: ChatParticipant[];
-  isOnline?: boolean;
-  lastSeen?: number;
-  presence?: string;
   lastMessage?: {
     id?: string;
     body?: string;
@@ -46,7 +43,6 @@ export interface Message {
   quotedMsgId?: string;
   hasMedia?: boolean;
   mediaUrl?: string;
-  resolvedMediaUrl?: string;
   filename?: string;
   caption?: string;
   mimeType?: string;

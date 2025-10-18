@@ -28,32 +28,6 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { getApiBaseUrl } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
-
-const forbiddenMessage = "Usuário autenticado não possui empresa vinculada.";
-
-async function getForbiddenMessage(response: Response): Promise<string> {
-  try {
-    const data = await response.json();
-    if (typeof data === "string") {
-      const trimmed = data.trim();
-      return trimmed || forbiddenMessage;
-    }
-    if (data && typeof data === "object") {
-      const record = data as Record<string, unknown>;
-      const keys = ["message", "mensagem", "error", "detail"];
-      for (const key of keys) {
-        const value = record[key];
-        if (typeof value === "string" && value.trim()) {
-          return value.trim();
-        }
-      }
-    }
-  } catch {
-    return forbiddenMessage;
-  }
-  return forbiddenMessage;
-}
 
 interface Opportunity {
   id: number;
@@ -85,7 +59,6 @@ export default function Pipeline() {
   const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
   const { fluxoId } = useParams<{ fluxoId?: string }>();
-  const { toast } = useToast();
 
   const [pipelineName, setPipelineName] = useState<string>("Vendas");
   const [stages, setStages] = useState<Stage[]>([]);
@@ -96,22 +69,6 @@ export default function Pipeline() {
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [movingOpportunityId, setMovingOpportunityId] = useState<number | null>(null);
   const [isSavingMove, setIsSavingMove] = useState(false);
-  const forbiddenToastShown = useRef(false);
-
-  const handleForbidden = async (response: Response, clear: () => void) => {
-    if (response.status !== 403) {
-      return false;
-    }
-    clear();
-    if (!forbiddenToastShown.current) {
-      const description = await getForbiddenMessage(response);
-      toast({ title: "Acesso negado", description, variant: "destructive" });
-      forbiddenToastShown.current = true;
-    } else {
-      await response.text().catch(() => {});
-    }
-    return true;
-  };
 
   useEffect(() => {
     const fetchStages = async () => {
@@ -119,9 +76,6 @@ export default function Pipeline() {
         const res = await fetch(`${apiUrl}/api/etiquetas`, {
           headers: { Accept: "application/json" },
         });
-        if (await handleForbidden(res, () => setStages([]))) {
-          return;
-        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -177,9 +131,6 @@ export default function Pipeline() {
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
           headers: { Accept: "application/json" },
         });
-        if (await handleForbidden(res, () => setPipelineName(""))) {
-          return;
-        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         type MenuApiItem = { id: number | string; nome?: string };
@@ -207,13 +158,6 @@ export default function Pipeline() {
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
           headers: { Accept: "application/json" },
         });
-        if (await handleForbidden(res, () => {
-          setFlows([]);
-          setSelectedFlow("");
-          setMoveStages([]);
-        })) {
-          return;
-        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         type MenuApiItem = { id: number | string; nome?: string };
@@ -248,12 +192,6 @@ export default function Pipeline() {
             headers: { Accept: "application/json" },
           }
         );
-        if (await handleForbidden(res, () => {
-          setMoveStages([]);
-          setSelectedStage("");
-        })) {
-          return;
-        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -322,16 +260,6 @@ export default function Pipeline() {
             headers: { Accept: "application/json" },
           }),
         ]);
-
-        if (
-          await handleForbidden(oppRes, () => setOpportunities([])) ||
-          await handleForbidden(areasRes, () => setOpportunities([])) ||
-          await handleForbidden(usersRes, () => setOpportunities([])) ||
-          await handleForbidden(clientsRes, () => setOpportunities([])) ||
-          await handleForbidden(typesRes, () => setOpportunities([]))
-        ) {
-          return;
-        }
 
         if (!oppRes.ok)
           throw new Error(`HTTP ${oppRes.status}: ${await oppRes.text()}`);

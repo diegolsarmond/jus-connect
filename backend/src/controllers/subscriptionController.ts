@@ -97,19 +97,17 @@ export const createSubscription = async (req: Request, res: Response) => {
 
   try {
     const existingSubscription = await fetchCompanySubscription(companyId);
-    const now = new Date();
-    const nowTime = now.getTime();
-
     if (existingSubscription) {
+      const now = Date.now();
       const hasActiveFlag = existingSubscription.isActive === true;
       const isWithinCurrentPeriod =
         existingSubscription.currentPeriodEnd instanceof Date &&
         !Number.isNaN(existingSubscription.currentPeriodEnd.getTime()) &&
-        nowTime <= existingSubscription.currentPeriodEnd.getTime();
+        now <= existingSubscription.currentPeriodEnd.getTime();
       const isWithinGracePeriod =
         existingSubscription.graceExpiresAt instanceof Date &&
         !Number.isNaN(existingSubscription.graceExpiresAt.getTime()) &&
-        nowTime <= existingSubscription.graceExpiresAt.getTime();
+        now <= existingSubscription.graceExpiresAt.getTime();
 
       if (hasActiveFlag || isWithinCurrentPeriod || isWithinGracePeriod) {
         res
@@ -131,9 +129,6 @@ export const createSubscription = async (req: Request, res: Response) => {
              grace_expires_at = $8,
              subscription_cadence = $9
        WHERE id = $10
-         AND (ativo IS NOT TRUE)
-         AND (current_period_end IS NULL OR current_period_end < $11)
-         AND (grace_expires_at IS NULL OR grace_expires_at < $11)
        RETURNING id, nome_empresa, plano, ativo, datacadastro, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_cadence`,
       [
         planId,
@@ -146,19 +141,11 @@ export const createSubscription = async (req: Request, res: Response) => {
         graceExpiresAt ?? null,
         cadence,
         companyId,
-        now,
       ]
     );
 
     if (result.rowCount === 0) {
-      if (!existingSubscription) {
-        res.status(404).json({ error: 'Empresa não encontrada.' });
-        return;
-      }
-
-      res
-        .status(409)
-        .json({ error: 'A empresa já possui assinatura ativa. Cancele ou atualize a assinatura existente.' });
+      res.status(404).json({ error: 'Empresa não encontrada.' });
       return;
     }
 

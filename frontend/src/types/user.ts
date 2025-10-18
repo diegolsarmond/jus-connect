@@ -53,8 +53,6 @@ export interface UserSession {
   location: string | null;
   lastActivity: Date;
   isActive: boolean;
-  isApproved: boolean;
-  approvedAt?: Date | null;
   createdAt?: Date;
   revokedAt?: Date | null;
   isCurrent?: boolean;

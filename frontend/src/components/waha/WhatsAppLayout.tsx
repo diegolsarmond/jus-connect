@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWAHA } from "@/hooks/useWAHA";
-import { useWahaRealtimeStream } from "./hooks/useWahaRealtimeStream";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
 import { NewConversationModal } from "@/features/chat/components/NewConversationModal";
 import { ConversationLoadingScreen } from "./ConversationLoadingScreen";
-import { ChatArea } from "./ChatArea";
 import type {
   ConversationSummary,
   Message as CRMMessage,
-  MessageStatus,
   SendMessageInput,
   UpdateConversationPayload,
 } from "@/features/chat/types";
@@ -19,11 +16,7 @@ import {
   type ChatResponsibleOption,
 } from "@/features/chat/services/chatApi";
 import type { ChatOverview, ChatParticipant, Message as WAHAMessage } from "@/types/waha";
-import WAHAService, {
-  WAHARequestError,
-  WAHA_SESSION_RECOVERY_MESSAGE,
-  wahaService,
-} from "@/services/waha";
+import WAHAService, { WAHARequestError, WAHA_SESSION_RECOVERY_MESSAGE } from "@/services/waha";
 import { useToast } from "@/hooks/use-toast";
 import { DeviceLinkModal } from "@/features/chat/components/DeviceLinkModal";
 import {
@@ -37,23 +30,6 @@ import TaskCreationDialog, { TaskCreationPrefill } from "@/components/tasks/Task
 import AppointmentCreationDialog, {
   AppointmentCreationPrefill,
 } from "@/components/agenda/AppointmentCreationDialog";
-import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -307,59 +283,8 @@ const mapChatToConversation = (
   return mergeOverrides(base, overrides);
 };
 
-const mapChatMessageTypeToWahaType = (type: CRMMessage["type"]): WAHAMessage["type"] => {
-  switch (type) {
-    case "image":
-      return "image";
-    case "audio":
-      return "audio";
-    case "file":
-      return "document";
-    default:
-      return "text";
-  }
-};
-
-const mapChatStatusToAckName = (status?: MessageStatus): "SENT" | "DELIVERED" | "READ" => {
-  if (status === "read") {
-    return "READ";
-  }
-  if (status === "delivered") {
-    return "DELIVERED";
-  }
-  return "SENT";
-};
-
-const mapChatMessageToWahaMessage = (message: CRMMessage): WAHAMessage => {
-  const timestamp = Date.parse(message.timestamp);
-  const attachments = message.attachments ?? [];
-  const [primaryAttachment] = attachments;
-  const resolvedType = mapChatMessageTypeToWahaType(message.type);
-  const mediaUrl = primaryAttachment?.downloadUrl ?? primaryAttachment?.url;
-  const hasMedia = resolvedType !== "text" || Boolean(mediaUrl);
-  const trimmedContent = message.content?.trim?.() ?? "";
-
-  return {
-    id: message.id,
-    chatId: message.conversationId,
-    body: trimmedContent,
-    timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
-    fromMe: message.sender === "me",
-    type: resolvedType,
-    ack: mapChatStatusToAckName(message.status),
-    hasMedia,
-    mediaUrl: mediaUrl ?? undefined,
-    filename: primaryAttachment?.name,
-    caption: hasMedia && trimmedContent.length > 0 ? trimmedContent : undefined,
-    mimeType: primaryAttachment?.mimeType,
-  };
-};
-
 export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   const messageType = mapWahaMessageType(message);
-  const resolvedMedia = typeof message.resolvedMediaUrl === "string" && message.resolvedMediaUrl.trim().length > 0
-    ? message.resolvedMediaUrl.trim()
-    : undefined;
   const mediaUrlCandidateKeys = [
     "mediaUrl",
     "url",
@@ -369,14 +294,12 @@ export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
     "filePath",
     "path",
   ] as const;
-  let mediaUrl: string | undefined = resolvedMedia;
-  if (!mediaUrl) {
-    for (const key of mediaUrlCandidateKeys) {
-      const value = (message as Record<string, unknown>)[key];
-      if (typeof value === "string" && value.trim().length > 0) {
-        mediaUrl = value.trim();
-        break;
-      }
+  let mediaUrl: string | undefined;
+  for (const key of mediaUrlCandidateKeys) {
+    const value = (message as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      mediaUrl = value.trim();
+      break;
     }
   }
 
@@ -497,12 +420,6 @@ export const WhatsAppLayout = ({
   >(undefined);
   const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
   const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
-  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isMarkingConversationUnread, setIsMarkingConversationUnread] = useState(false);
-  const [chatIdPendingDeletion, setChatIdPendingDeletion] = useState<string | null>(null);
-  const [isDeletingChat, setIsDeletingChat] = useState(false);
-  const [detailsChatId, setDetailsChatId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -521,23 +438,17 @@ export const WhatsAppLayout = ({
     () => deriveSessionName(companyNameFromAuth),
     [companyNameFromAuth],
   );
-  const wahaState = useWAHA(sessionNameOverride, { enablePolling: !isRealtimeConnected });
+  const wahaState = useWAHA(sessionNameOverride);
   const {
     chats: rawChats,
     messages: messageMap,
     addMessage,
-    updateMessageStatus,
-    updateChatUnreadCount,
-    updateMessageAck,
     selectChat,
     loadMessages,
     loadOlderMessages,
     loadChats,
     loadMoreChats,
     activeChatId,
-    activeChat,
-    activeChatMessages,
-    sendMessage,
     sessionStatus,
     checkSessionStatus,
     loading,
@@ -615,38 +526,16 @@ export const WhatsAppLayout = ({
     }
   }, [hasStartedLoading, loading]);
 
-
   // Set up webhook receiver for demo purposes
   useEffect(() => {
     window.wahaWebhookReceived = (message) => {
       addMessage(message);
     };
-    window.wahaWebhookStatusUpdate = (update) => {
-      if (!update) {
-        return;
-      }
-
-      const { chatId, messageId, ack } = update;
-      if (!chatId || !messageId || !ack) {
-        return;
-      }
-
-      const normalizedAck = typeof ack === "string" ? ack.toUpperCase() : "";
-      const resolvedAck =
-        normalizedAck === "READ"
-          ? "READ"
-          : normalizedAck === "DELIVERED"
-            ? "DELIVERED"
-            : "SENT";
-
-      updateMessageAck(chatId, messageId, resolvedAck);
-    };
 
     return () => {
       delete window.wahaWebhookReceived;
-      delete window.wahaWebhookStatusUpdate;
     };
-  }, [addMessage, updateMessageAck]);
+  }, [addMessage]);
 
   useEffect(() => {
     const activeId = activeChatId ?? undefined;
@@ -671,28 +560,6 @@ export const WhatsAppLayout = ({
       return timeB - timeA;
     });
   }, [rawChats, conversationOverrides, responsibleOptions]);
-
-  const conversationPendingDeletion = useMemo(
-    () =>
-      chatIdPendingDeletion
-        ? rawChats.find((chat) => chat.id === chatIdPendingDeletion) ?? null
-        : null,
-    [chatIdPendingDeletion, rawChats],
-  );
-
-  const detailsChat = useMemo(
-    () =>
-      detailsChatId ? rawChats.find((chat) => chat.id === detailsChatId) ?? null : null,
-    [detailsChatId, rawChats],
-  );
-
-  const detailsConversationSummary = useMemo(
-    () =>
-      detailsChatId
-        ? conversations.find((conversation) => conversation.id === detailsChatId) ?? null
-        : null,
-    [conversations, detailsChatId],
-  );
 
   const sidebarResponsibleOptions = useMemo(() => {
     if (restrictToAssigned) {
@@ -806,8 +673,14 @@ export const WhatsAppLayout = ({
     void handleSelectConversation(conversationIdFromRoute, { skipNavigation: true });
   }, [conversationIdFromRoute, handleSelectConversation, activeChatId]);
 
-  const showSendMessageError = useCallback(
-    (error: unknown) => {
+  const handleSendMessage = async (payload: SendMessageInput) => {
+    if (!activeConversationId) {
+      return;
+    }
+
+    try {
+      await wahaState.sendMessage(payload);
+    } catch (error) {
       let title = "Erro";
       let description = "Não foi possível enviar a mensagem. Tente novamente.";
 
@@ -827,156 +700,8 @@ export const WhatsAppLayout = ({
         description,
         variant: "destructive",
       });
-    },
-    [toast],
-  );
-
-  const handleSendMessage = async (payload: SendMessageInput) => {
-    if (!activeConversationId) {
-      return;
-    }
-
-    try {
-      await sendMessage(payload);
-    } catch (error) {
-      showSendMessageError(error);
     }
   };
-
-  const handleSendMessageFromChatArea = useCallback(
-    async (chatId: string, text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) {
-        return;
-      }
-
-      try {
-        await sendMessage({ content: trimmed }, { chatId });
-      } catch (error) {
-        showSendMessageError(error);
-      }
-    },
-    [sendMessage, showSendMessageError],
-  );
-
-  const handleMarkChatAsUnread = useCallback(
-    async (chatId: string) => {
-      if (isMarkingConversationUnread) {
-        return;
-      }
-
-      setIsMarkingConversationUnread(true);
-      try {
-        const chat = rawChats.find((item) => item.id === chatId);
-        const currentUnread = chat?.unreadCount ?? 0;
-        const nextUnread = currentUnread > 0 ? currentUnread : 1;
-
-        updateChatUnreadCount(chatId, nextUnread);
-
-        toast({
-          title: "Conversa atualizada",
-          description: "Marcamos a conversa como não lida.",
-        });
-      } catch (error) {
-        const description =
-          error instanceof Error && error.message.trim()
-            ? error.message
-            : "Não foi possível marcar a conversa como não lida.";
-
-        toast({
-          title: "Falha ao marcar como não lida",
-          description,
-          variant: "destructive",
-        });
-      } finally {
-        setIsMarkingConversationUnread(false);
-      }
-    },
-    [isMarkingConversationUnread, rawChats, toast, updateChatUnreadCount],
-  );
-
-  const handleRequestDeleteChat = useCallback(async (chatId: string) => {
-    setChatIdPendingDeletion(chatId);
-  }, []);
-
-  const handleRequestOpenDetails = useCallback(async (chatId: string) => {
-    setDetailsChatId(chatId);
-  }, []);
-
-  const handleConfirmDeleteChat = useCallback(async () => {
-    if (!chatIdPendingDeletion) {
-      return;
-    }
-
-    const chatId = chatIdPendingDeletion;
-    setIsDeletingChat(true);
-    try {
-      const response = await wahaService.deleteChat(chatId);
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      toast({
-        title: "Conversa excluída",
-        description: "Removemos a conversa do histórico.",
-      });
-
-      if (activeConversationId === chatId) {
-        onConversationRouteChange?.(null);
-      }
-
-      updateChatUnreadCount(chatId, 0);
-      setConversationOverrides((previous) => {
-        if (!(chatId in previous)) {
-          return previous;
-        }
-        const { [chatId]: _unused, ...rest } = previous;
-        return rest;
-      });
-
-      await loadChats({ reset: true });
-    } catch (error) {
-      let title = "Falha ao excluir conversa";
-      let description = "Não foi possível excluir a conversa. Tente novamente.";
-
-      if (error instanceof WAHARequestError) {
-        if (error.status === 422) {
-          title = "Sessão desconectada";
-          description = error.message?.trim() || WAHA_SESSION_RECOVERY_MESSAGE;
-        } else if (error.message?.trim()) {
-          description = error.message;
-        }
-      } else if (error instanceof Error && error.message.trim()) {
-        description = error.message;
-      }
-
-      toast({
-        title,
-        description,
-        variant: "destructive",
-      });
-    } finally {
-      setIsDeletingChat(false);
-      setChatIdPendingDeletion(null);
-    }
-  }, [
-    activeConversationId,
-    chatIdPendingDeletion,
-    loadChats,
-    onConversationRouteChange,
-    toast,
-    updateChatUnreadCount,
-    setConversationOverrides,
-  ]);
-
-  const formatChatTimestamp = useCallback((value?: number) => {
-    if (!value) {
-      return "—";
-    }
-
-    const timestamp = value < 1_000_000_000_000 ? value * 1000 : value;
-    return new Date(timestamp).toLocaleString("pt-BR");
-  }, []);
 
   const handleUpdateConversation = async (
     conversationId: string,
@@ -1029,102 +754,6 @@ export const WhatsAppLayout = ({
       return { ...previous, [conversationId]: next };
     });
   };
-
-  const handleRealtimeConversationUpdate = useCallback(
-    (conversation: ConversationSummary) => {
-      const { id, ...rest } = conversation;
-
-      setConversationOverrides((previous) => {
-        const current = previous[id] ?? {};
-        const next: Partial<ConversationSummary> = { ...current };
-        let changed = false;
-
-        for (const [key, value] of Object.entries(rest)) {
-          if (value === undefined) {
-            continue;
-          }
-          const record = next as Record<string, unknown>;
-          if (record[key] !== value) {
-            record[key] = value;
-            changed = true;
-          }
-        }
-
-        if (!changed) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          [id]: next,
-        };
-      });
-
-      if (typeof rest.unreadCount === "number") {
-        updateChatUnreadCount(id, rest.unreadCount);
-      }
-
-      const exists = rawChats.some((chat) => chat.id === id);
-      if (!exists) {
-        void loadChats({ reset: true, silent: true });
-      }
-    },
-    [loadChats, rawChats, updateChatUnreadCount],
-  );
-
-  const handleRealtimeMessageNew = useCallback(
-    ({ conversationId, message }: { conversationId: string; message: CRMMessage }) => {
-      addMessage(mapChatMessageToWahaMessage(message));
-
-      const exists = rawChats.some((chat) => chat.id === conversationId);
-      if (!exists) {
-        void loadChats({ reset: true, silent: true });
-      }
-    },
-    [addMessage, loadChats, rawChats],
-  );
-
-  const handleRealtimeMessageStatus = useCallback(
-    ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: MessageStatus }) => {
-      updateMessageStatus(conversationId, messageId, status);
-    },
-    [updateMessageStatus],
-  );
-
-  const handleRealtimeConversationRead = useCallback(
-    ({ conversationId }: { conversationId: string }) => {
-      updateChatUnreadCount(conversationId, 0);
-
-      setConversationOverrides((previous) => {
-        const current = previous[conversationId];
-        if (!current || current.unreadCount === 0) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          [conversationId]: {
-            ...current,
-            unreadCount: 0,
-          },
-        };
-      });
-    },
-    [updateChatUnreadCount],
-  );
-
-  const { isConnected: realtimeConnected } = useWahaRealtimeStream({
-    onConversationUpdate: handleRealtimeConversationUpdate,
-    onMessageNew: handleRealtimeMessageNew,
-    onMessageStatus: handleRealtimeMessageStatus,
-    onConversationRead: handleRealtimeConversationRead,
-  });
-
-  useEffect(() => {
-    setIsRealtimeConnected((previous) =>
-      previous === realtimeConnected ? previous : realtimeConnected,
-    );
-  }, [realtimeConnected]);
 
   const conversationSuggestions = useMemo(
     () => conversations.slice(0, 60),
@@ -1305,18 +934,6 @@ export const WhatsAppLayout = ({
             responsibleOptions={responsibleOptions}
             isLoadingResponsibles={isLoadingResponsibles}
           />
-          <div className="hidden">
-            <ChatArea
-              activeChat={activeChat ?? null}
-              messages={activeChatMessages ?? []}
-              onSendMessage={handleSendMessageFromChatArea}
-              onToggleSidebar={() => setIsMobileSidebarOpen((previous) => !previous)}
-              sidebarOpen={isMobileSidebarOpen}
-              onMarkAsUnread={handleMarkChatAsUnread}
-              onDeleteChat={handleRequestDeleteChat}
-              onOpenDetails={handleRequestOpenDetails}
-            />
-          </div>
         </div>
       </div>
 
@@ -1357,135 +974,6 @@ export const WhatsAppLayout = ({
         }}
         prefill={appointmentPrefill}
       />
-
-      <AlertDialog
-        open={chatIdPendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open && !isDeletingChat) {
-            setChatIdPendingDeletion(null);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza de que deseja excluir {conversationPendingDeletion?.name || "esta conversa"}?
-              Essa ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingChat}>Cancelar</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmDeleteChat}
-              disabled={isDeletingChat}
-            >
-              {isDeletingChat ? "Excluindo..." : "Excluir"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Dialog
-        open={Boolean(detailsChatId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailsChatId(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Detalhes da conversa</DialogTitle>
-            <DialogDescription>Informações adicionais do contato.</DialogDescription>
-          </DialogHeader>
-          {detailsChat ? (
-            <div className="space-y-4 text-left">
-              <div>
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Nome</span>
-                <p className="font-medium text-sidebar-foreground">
-                  {detailsChat.name || "Contato sem nome"}
-                </p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Identificador</span>
-                  <p className="text-sm text-sidebar-foreground break-all">{detailsChat.id}</p>
-                </div>
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Tipo</span>
-                  <p className="text-sm text-sidebar-foreground">
-                    {detailsChat.isGroup ? 'Grupo' : 'Individual'}
-                  </p>
-                </div>
-              </div>
-              {detailsConversationSummary?.phoneNumber ? (
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Telefone</span>
-                  <p className="text-sm text-sidebar-foreground">
-                    {detailsConversationSummary.phoneNumber}
-                  </p>
-                </div>
-              ) : null}
-              {detailsConversationSummary?.responsible ? (
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Responsável</span>
-                  <p className="text-sm text-sidebar-foreground">
-                    {detailsConversationSummary.responsible.name}
-                  </p>
-                </div>
-              ) : null}
-              {detailsConversationSummary?.clientName ? (
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Cliente</span>
-                  <p className="text-sm text-sidebar-foreground">
-                    {detailsConversationSummary.clientName}
-                  </p>
-                </div>
-              ) : null}
-              <div>
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Não lidas</span>
-                <p className="text-sm text-sidebar-foreground">
-                  {(detailsChat.unreadCount ?? 0).toString()}
-                </p>
-              </div>
-              {detailsChat.lastMessage ? (
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Última mensagem</span>
-                  <p className="text-sm text-sidebar-foreground">
-                    {detailsChat.lastMessage.body || detailsChat.lastMessage.type || "Mensagem"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatChatTimestamp(detailsChat.lastMessage.timestamp)}
-                  </p>
-                </div>
-              ) : null}
-              {detailsChat.participants && detailsChat.participants.length > 0 ? (
-                <div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Participantes</span>
-                  <ul className="mt-1 space-y-1">
-                    {detailsChat.participants.map((participant) => {
-                      const name =
-                        participant.name?.trim() ||
-                        WAHAService.extractPhoneFromWhatsAppId(participant.id);
-                      return (
-                        <li key={participant.id} className="text-sm text-sidebar-foreground">
-                          {name}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Não foi possível carregar os detalhes da conversa.
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {shouldShowOverlayLoading ? (
         <div className="absolute inset-0 z-50 flex">

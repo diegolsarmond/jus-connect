@@ -1,11 +1,3 @@
-interface FtpConfig {
-  host?: string;
-  port?: number;
-  user?: string;
-  root?: string;
-  secure: boolean;
-}
-
 export interface AppConfig {
   appName: string;
   environment: string;
@@ -14,7 +6,6 @@ export interface AppConfig {
   adminBasePath: string;
   apiBaseUrl?: string;
   enableMockData: boolean;
-  ftp?: FtpConfig;
 }
 
 const sanitizeString = (value: string | undefined) => {
@@ -86,19 +77,6 @@ const joinPathSegments = (...segments: (string | undefined)[]) => {
   return `/${parts.join("/")}`;
 };
 
-const parseInteger = (value: string | undefined) => {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-
-  return parsed;
-};
-
 export const appConfig: AppConfig = {
     appName: sanitizeString(import.meta.env.VITE_APP_NAME) ?? "Quantum Tecnologia",
   environment: import.meta.env.MODE,
@@ -107,25 +85,6 @@ export const appConfig: AppConfig = {
   adminBasePath: normalizePath(import.meta.env.VITE_ADMIN_BASE_PATH, "/admin"),
   apiBaseUrl: normalizeUrl(import.meta.env.VITE_API_BASE_URL),
   enableMockData: parseBoolean(import.meta.env.VITE_ENABLE_MOCKS, true),
-  ftp: (() => {
-    const host = sanitizeString(import.meta.env.VITE_FTP_HOST);
-    const user = sanitizeString(import.meta.env.VITE_FTP_USER);
-    const root = sanitizeString(import.meta.env.VITE_FTP_ROOT);
-    const port = parseInteger(sanitizeString(import.meta.env.VITE_FTP_PORT));
-    const secure = parseBoolean(import.meta.env.VITE_FTP_SECURE, true);
-
-    if (!host && !user && !root && typeof port === "undefined") {
-      return undefined;
-    }
-
-    return {
-      host,
-      user,
-      root,
-      port,
-      secure,
-    } satisfies FtpConfig;
-  })(),
 };
 
 export const buildAppPath = (...segments: string[]) => joinPathSegments(appConfig.basePath, ...segments);

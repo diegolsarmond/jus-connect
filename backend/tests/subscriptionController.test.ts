@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
-import { SUBSCRIPTION_TRIAL_DAYS } from '../src/constants/subscription';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
@@ -56,7 +55,7 @@ const setupQueryMock = (responses: Array<{ rows: any[]; rowCount: number }>) => 
 test('createSubscription records a trial subscription and returns trial end date', async () => {
   const startDate = new Date('2024-03-01T12:00:00.000Z');
   const expectedTrialEnd = new Date(startDate);
-  expectedTrialEnd.setDate(expectedTrialEnd.getDate() + SUBSCRIPTION_TRIAL_DAYS);
+  expectedTrialEnd.setDate(expectedTrialEnd.getDate() + 14);
 
   const { calls, restore } = setupQueryMock([
     {
@@ -141,8 +140,7 @@ test('createSubscription records a trial subscription and returns trial end date
   assert.deepEqual(calls[1]?.values, [42]);
 
   assert.match(calls[2]?.text ?? '', /UPDATE public\.empresas/);
-  assert.equal(calls[2]?.values?.length, 11);
-  assert.deepEqual(calls[2]?.values?.slice(0, 10), [
+  assert.deepEqual(calls[2]?.values, [
     7,
     true,
     startDate,
@@ -154,7 +152,6 @@ test('createSubscription records a trial subscription and returns trial end date
     'monthly',
     42,
   ]);
-  assert.ok(calls[2]?.values?.[10] instanceof Date);
 });
 
 test('createSubscription returns 409 if company already has an active subscription', async () => {

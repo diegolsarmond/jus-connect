@@ -8,10 +8,6 @@ import {
   countClientesAtivos,
 } from '../controllers/clienteController';
 import { getAsaasCustomerStatus, syncAsaasCustomerNow } from '../controllers/asaasCustomerController';
-import {
-  ensureAuthenticatedEmpresa,
-  ensureAuthenticatedEmpresaWithOptions,
-} from '../middlewares/ensureAuthenticatedEmpresa';
 
 const router = Router();
 
@@ -76,7 +72,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Cliente'
  */
-router.get('/clientes', ensureAuthenticatedEmpresa, listClientes);
+router.get('/clientes', listClientes);
 
 /**
  * @swagger
@@ -95,7 +91,7 @@ router.get('/clientes', ensureAuthenticatedEmpresa, listClientes);
  *                 total_clientes_ativos:
  *                   type: integer
  */
-router.get('/clientes/ativos/total', ensureAuthenticatedEmpresa, countClientesAtivos);
+router.get('/clientes/ativos/total', countClientesAtivos);
 
 /**
  * @swagger
@@ -119,7 +115,7 @@ router.get('/clientes/ativos/total', ensureAuthenticatedEmpresa, countClientesAt
  *       404:
  *         description: Cliente não encontrado
  */
-router.get('/clientes/:id', ensureAuthenticatedEmpresa, getClienteById);
+router.get('/clientes/:id', getClienteById);
 
 /**
  * @swagger
@@ -168,7 +164,7 @@ router.get('/clientes/:id', ensureAuthenticatedEmpresa, getClienteById);
  *             schema:
  *               $ref: '#/components/schemas/Cliente'
  */
-router.post('/clientes', ensureAuthenticatedEmpresa, createCliente);
+router.post('/clientes', createCliente);
 
 /**
  * @swagger
@@ -188,11 +184,7 @@ router.post('/clientes', ensureAuthenticatedEmpresa, createCliente);
  *       404:
  *         description: Cliente não encontrado
  */
-router.get(
-  '/asaas/customers/:clienteId/status',
-  ensureAuthenticatedEmpresaWithOptions({ empresaNaoVinculadaStatus: 400 }),
-  getAsaasCustomerStatus
-);
+router.get('/asaas/customers/:clienteId/status', getAsaasCustomerStatus);
 
 /**
  * @swagger
@@ -212,11 +204,7 @@ router.get(
  *       404:
  *         description: Cliente não encontrado
  */
-router.get(
-  '/asaas/customers/status',
-  ensureAuthenticatedEmpresaWithOptions({ empresaNaoVinculadaStatus: 400 }),
-  getAsaasCustomerStatus
-);
+router.get('/asaas/customers/status', getAsaasCustomerStatus);
 
 /**
  * @swagger
@@ -241,11 +229,7 @@ router.get(
  *       404:
  *         description: Cliente não encontrado
  */
-router.post(
-  '/asaas/customers/sync',
-  ensureAuthenticatedEmpresaWithOptions({ empresaNaoVinculadaStatus: 400 }),
-  syncAsaasCustomerNow
-);
+router.post('/asaas/customers/sync', syncAsaasCustomerNow);
 
 /**
  * @swagger
@@ -302,7 +286,7 @@ router.post(
  *       404:
  *         description: Cliente não encontrado
  */
-router.put('/clientes/:id', ensureAuthenticatedEmpresa, updateCliente);
+router.put('/clientes/:id', updateCliente);
 
 /**
  * @swagger
@@ -322,7 +306,7 @@ router.put('/clientes/:id', ensureAuthenticatedEmpresa, updateCliente);
  *       404:
  *         description: Cliente não encontrado
  */
-router.delete('/clientes/:id', ensureAuthenticatedEmpresa, deleteCliente);
+router.delete('/clientes/:id', deleteCliente);
 
 export default router;
 

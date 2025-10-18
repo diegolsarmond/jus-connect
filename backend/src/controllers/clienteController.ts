@@ -1,20 +1,14 @@
 import { Request, Response } from 'express';
+import pool from '../services/db';
 import {
   countCompanyResource,
   fetchPlanLimitsForCompany,
 } from '../services/planLimitsService';
-import {
-  countClientesAtivosByEmpresaId,
-  countClientesByEmpresaId,
-  findClienteById,
-  listClientesByEmpresaId,
-} from '../services/clienteRepository';
-import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasCustomerService, {
   AsaasCustomerState,
   ClienteLocalData,
 } from '../services/asaasCustomerService';
-import { ensureAuthenticatedEmpresaId } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const asaasCustomerService = new AsaasCustomerService();
 
@@ -50,81 +44,88 @@ const triggerAsaasSync = (
 
 export const listClientes = async (req: Request, res: Response) => {
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const queryValue = (value: unknown): string | undefined => {
-      if (Array.isArray(value)) {
-        return value[0];
-      }
-      return typeof value === 'string' ? value : undefined;
-    };
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
-    const pageParam = queryValue(req.query.page);
-    const pageSizeParam = queryValue(req.query.pageSize ?? req.query.limit);
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
 
-    const parsedPage = pageParam ? Number.parseInt(pageParam, 10) : Number.NaN;
-    const parsedPageSize = pageSizeParam
-      ? Number.parseInt(pageSizeParam, 10)
-      : Number.NaN;
+    const { empresaId } = empresaLookup;
 
-    const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
-    const pageSize =
-      Number.isNaN(parsedPageSize) || parsedPageSize < 1 ? 20 : parsedPageSize;
+    if (empresaId === null) {
+      return res.json([]);
+    }
 
-    const offset = (page - 1) * pageSize;
-
-    const clientes = await listClientesByEmpresaId(empresaId, {
-      limit: pageSize,
-      offset,
-      orderBy: 'nome',
-      orderDirection: 'asc',
-    });
-
-    const total = await countClientesByEmpresaId(empresaId);
-
-    return res.json({ data: clientes, total, page, pageSize });
+    const result = await pool.query(
+      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE idempresa = $1',
+      [empresaId]
+    );
+    return res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const getClienteById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const cliente = await findClienteById(id, empresaId);
-    if (!cliente) {
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const result = await pool.query(
+      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [id, empresaLookup.empresaId]
+    );
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
-    res.json(cliente);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const countClientesAtivos = async (req: Request, res: Response) => {
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const totalClientesAtivos = await countClientesAtivosByEmpresaId(empresaId);
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json({ total_clientes_ativos: 0 });
+    }
+
+    const result = await pool.query(
+      'SELECT COUNT(*) AS total_clientes_ativos FROM public.clientes WHERE ativo = TRUE AND idempresa = $1',
+      [empresaId]
+    );
     res.json({
-      total_clientes_ativos: totalClientesAtivos,
+      total_clientes_ativos: parseInt(result.rows[0].total_clientes_ativos, 10),
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -169,9 +170,22 @@ export const createCliente = async (req: Request, res: Response) => {
   })();
 
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     if (tipoNormalizado === null) {
@@ -180,11 +194,7 @@ export const createCliente = async (req: Request, res: Response) => {
 
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     if (planLimits?.limiteClientes != null) {
-      const clientesCount = await countCompanyResource(
-        empresaId,
-        'clientes',
-        planLimits.limiteClientes,
-      );
+      const clientesCount = await countCompanyResource(empresaId, 'clientes');
       if (clientesCount >= planLimits.limiteClientes) {
         return res
           .status(403)
@@ -247,7 +257,7 @@ export const createCliente = async (req: Request, res: Response) => {
     res.status(201).json({ ...createdCliente, asaasIntegration });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -293,9 +303,22 @@ export const updateCliente = async (req: Request, res: Response) => {
   })();
 
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     if (tipoNormalizado === null) {
@@ -359,16 +382,29 @@ export const updateCliente = async (req: Request, res: Response) => {
     res.json({ ...updatedCliente, asaasIntegration });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const deleteCliente = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
-    if (empresaId === undefined) {
-      return;
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -381,7 +417,7 @@ export const deleteCliente = async (req: Request, res: Response) => {
     res.json({ ativo: result.rows[0].ativo });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

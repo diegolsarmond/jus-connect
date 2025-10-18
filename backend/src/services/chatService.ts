@@ -1217,8 +1217,7 @@ export default class ChatService {
     const description = input.description?.trim() || null;
     const shortStatus = input.shortStatus?.trim() || null;
     const avatar = input.avatar?.trim() || null;
-    const pinnedProvided = input.pinned !== undefined;
-    const pinned = pinnedProvided ? normalizeBoolean(input.pinned, false) : null;
+    const pinned = normalizeBoolean(input.pinned, false);
     const metadata = normalizeMetadata(input.metadata);
 
     const result = await this.query(
@@ -1232,7 +1231,7 @@ export default class ChatService {
          pinned,
          metadata
        )
-       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $9::boolean THEN $7::boolean ELSE false END, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE
         SET contact_identifier = COALESCE(chat_conversations.contact_identifier, EXCLUDED.contact_identifier),
             contact_name = CASE
@@ -1246,7 +1245,6 @@ export default class ChatService {
             END,
             short_status = COALESCE(EXCLUDED.short_status, chat_conversations.short_status),
             description = COALESCE(EXCLUDED.description, chat_conversations.description),
-            pinned = CASE WHEN $9::boolean THEN EXCLUDED.pinned ELSE chat_conversations.pinned END,
             metadata = CASE
               WHEN chat_conversations.metadata IS NULL AND EXCLUDED.metadata IS NULL THEN NULL
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
@@ -1256,7 +1254,7 @@ export default class ChatService {
                  custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
-      [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata, pinnedProvided]
+      [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]
     );
 
     return mapConversation(result.rows[0] as ConversationRow);

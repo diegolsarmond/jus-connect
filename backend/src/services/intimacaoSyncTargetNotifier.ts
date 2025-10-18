@@ -1,5 +1,4 @@
 import pool from './db';
-import { createNotification } from './notificationService';
 
 type SyncEventType = 'intimacoes.sync.targets' | 'processos.sync.targets';
 
@@ -60,72 +59,11 @@ const SYNC_TARGET_QUERIES: Record<SyncEventType, string> = {
                               WHERE empresa_id = $1`,
 };
 
-type SyncTargetRow = {
-  usuario_id?: string | number | null;
-  usuario_nome?: string | null;
-  nome_empresa?: string | null;
-};
-
 const fetchSyncTargets = async (empresaId: number, eventType: SyncEventType) => {
   const result = await pool.query(SYNC_TARGET_QUERIES[eventType], [empresaId]);
 
 
   return result.rows;
-};
-
-let createNotificationHandler = createNotification;
-
-export const __setCreateNotificationHandler = (
-  handler: typeof createNotification,
-) => {
-  createNotificationHandler = handler;
-};
-
-export const __resetCreateNotificationHandler = () => {
-  createNotificationHandler = createNotification;
-};
-
-const notifySyncFailure = async (
-  empresaId: number,
-  eventType: SyncEventType,
-  rows: SyncTargetRow[],
-) => {
-  const tasks: Promise<unknown>[] = [];
-
-  for (const row of rows) {
-    const usuarioId = row?.usuario_id;
-    if (usuarioId === null || usuarioId === undefined) {
-      continue;
-    }
-
-    const userId = String(usuarioId).trim();
-    if (!userId) {
-      continue;
-    }
-
-    tasks.push(
-      createNotificationHandler({
-        userId,
-        category: 'sync',
-        type: 'error',
-        title: 'Falha na sincronização',
-        message:
-          'Não foi possível completar a sincronização automática. Revise a integração nas configurações.',
-        metadata: {
-          empresaId,
-          eventType,
-          companyName: row?.nome_empresa ?? undefined,
-          userName: row?.usuario_nome ?? undefined,
-        },
-      }),
-    );
-  }
-
-  if (tasks.length === 0) {
-    return;
-  }
-
-  await Promise.allSettled(tasks);
 };
 
 const fetchIntegrationApiUrl = async (): Promise<string | null> => {
@@ -169,7 +107,6 @@ export const notifyIntimacaoSyncTargets = async (
   const fetchImpl = (globalThis as { fetch?: typeof fetch }).fetch;
   if (!fetchImpl) {
     console.error('Fetch API indisponível para notificar sincronização', { empresaId, eventType });
-    await notifySyncFailure(empresaId, eventType, rows as SyncTargetRow[]);
     return;
   }
 
@@ -189,10 +126,8 @@ export const notifyIntimacaoSyncTargets = async (
         status: response.status,
         statusText: response.statusText,
       });
-      await notifySyncFailure(empresaId, eventType, rows as SyncTargetRow[]);
     }
   } catch (error) {
     console.error('Erro ao notificar sincronização', error, { empresaId, eventType });
-    await notifySyncFailure(empresaId, eventType, rows as SyncTargetRow[]);
   }
 };

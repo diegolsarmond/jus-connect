@@ -24,15 +24,6 @@ interface ApiCliente {
   datacadastro?: unknown;
 }
 
-interface ApiOportunidade {
-  status_id?: unknown;
-}
-
-interface ApiSituacaoProposta {
-  id?: unknown;
-  nome?: unknown;
-}
-
 interface ApiEmpresa extends CompanySubscriptionSource {
   id?: unknown;
   nome_empresa?: unknown;
@@ -78,7 +69,6 @@ export interface DashboardAnalytics {
   };
   monthlySeries: MonthlySeriesPoint[];
   areaDistribution: DistributionSlice[];
-  opportunityStatusMetrics: OpportunityStatusMetric[];
 }
 
 export interface ReportsAnalytics {
@@ -184,11 +174,6 @@ export interface RevenueByPlanSlice {
 export interface DistributionSlice {
   name: string;
   value: number;
-}
-
-export interface OpportunityStatusMetric {
-  status: string;
-  count: number;
 }
 
 export interface AdminMetrics {
@@ -657,16 +642,12 @@ function safeDivide(numerator: number, denominator: number): number {
 }
 
 export async function loadDashboardAnalytics(signal?: AbortSignal): Promise<DashboardAnalytics> {
-  const [processos, clientes, oportunidades, situacoes] = await Promise.all<[
+  const [processos, clientes] = await Promise.all<[
     ApiProcesso[],
     ApiCliente[],
-    ApiOportunidade[],
-    ApiSituacaoProposta[],
   ]>([
     fetchCollection<ApiProcesso>("processos", signal),
     fetchCollection<ApiCliente>("clientes", signal),
-    fetchCollection<ApiOportunidade>("oportunidades", signal).catch<ApiOportunidade[]>(() => []),
-    fetchCollection<ApiSituacaoProposta>("situacao-propostas", signal).catch<ApiSituacaoProposta[]>(() => []),
   ]);
 
   const processCounts = new Map<string, { total: number; concluded: number }>();
@@ -743,37 +724,6 @@ export async function loadDashboardAnalytics(signal?: AbortSignal): Promise<Dash
     areaMap.set(label, (areaMap.get(label) ?? 0) + 1);
   });
 
-  const statusNameMap = new Map<number, string>();
-  situacoes.forEach((situacao) => {
-    const id = normalizeNumber(situacao.id);
-    const name = normalizeString(situacao.nome);
-    if (id === null || !Number.isFinite(id)) {
-      return;
-    }
-    const normalizedId = Math.trunc(id);
-    if (normalizedId <= 0) {
-      return;
-    }
-    if (name) {
-      statusNameMap.set(normalizedId, name);
-    }
-  });
-
-  const opportunityStatusCounts = new Map<string, number>();
-  oportunidades.forEach((oportunidade) => {
-    const id = normalizeNumber(oportunidade.status_id);
-    const normalizedId = id === null ? null : Number.isFinite(id) ? Math.trunc(id) : null;
-    const label = normalizedId !== null
-      ? statusNameMap.get(normalizedId) ?? `Status ${normalizedId}`
-      : "Sem status";
-    const key = label.trim().length > 0 ? label : "Sem status";
-    opportunityStatusCounts.set(key, (opportunityStatusCounts.get(key) ?? 0) + 1);
-  });
-
-  const opportunityStatusMetrics = Array.from(opportunityStatusCounts.entries())
-    .map(([status, count]) => ({ status, count }))
-    .sort((a, b) => b.count - a.count);
-
   return {
     processMetrics: {
       total: totalProcessos,
@@ -792,7 +742,6 @@ export async function loadDashboardAnalytics(signal?: AbortSignal): Promise<Dash
     },
     monthlySeries: buildMonthlySeries(monthKeys, processCounts, clientNewCounts, clientActiveCumulative),
     areaDistribution: buildDistribution(areaMap),
-    opportunityStatusMetrics,
   };
 }
 

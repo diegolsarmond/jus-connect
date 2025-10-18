@@ -21,7 +21,6 @@ interface ChatSidebarProps {
   isLoadingMore?: boolean;
   allowUnassignedFilter?: boolean;
   isResponsibleFilterLocked?: boolean;
-  isOpen?: boolean;
 }
 
 export const ChatSidebar = ({
@@ -41,7 +40,6 @@ export const ChatSidebar = ({
   isLoadingMore = false,
   allowUnassignedFilter = true,
   isResponsibleFilterLocked = false,
-  isOpen = true,
 }: ChatSidebarProps) => {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const filtered = useMemo(() => {
@@ -119,11 +117,7 @@ export const ChatSidebar = ({
   };
 
   return (
-    <aside
-      className={styles.sidebar}
-      data-sidebar-open={isOpen ? "true" : "false"}
-      aria-label="Lista de conversas"
-    >
+    <aside className={styles.sidebar} aria-label="Lista de conversas">
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <h1>Conversas</h1>

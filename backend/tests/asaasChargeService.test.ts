@@ -40,13 +40,6 @@ class FakeAsaasClient implements AsaasClient {
     this.payloads.push(payload);
     return this.response;
   }
-
-  async getPaymentPixQrCode() {
-    const payload = this.response?.pixCopiaECola ?? null;
-    const encodedImage = this.response?.pixQrCode ?? null;
-
-    return { payload, encodedImage };
-  }
 }
 
 function createChargeInput(overrides: Partial<CreateAsaasChargeInput> = {}): CreateAsaasChargeInput {
@@ -285,11 +278,7 @@ test('AsaasChargeService.createCharge maps refunded responses to estornado statu
   ]);
 
   const fakeClient = new FakeAsaasClient(chargeResponse);
-  const service = new AsaasChargeService(db as any, async () => ({
-    client: fakeClient as any,
-    credentialId: null,
-    integrationApiKeyId: null,
-  }));
+  const service = new AsaasChargeService(db as any, async () => fakeClient as any);
 
   const result = await service.createCharge(createChargeInput({ financialFlowId: 13 }));
 
