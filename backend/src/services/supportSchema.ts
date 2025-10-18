@@ -14,6 +14,38 @@ let initializationPromise: Promise<void> | null = null;
 let cachedSchemaPath: string | null = null;
 let connectionWarningLogged = false;
 
+const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
+const DEFAULT_RETRY_MAX_DELAY_MS = 30_000;
+
+type EnsureSupportSchemaOptions = {
+  /**
+   * Allows tests to customize the retry delay strategy.
+   */
+  delay?: (attempt: number) => Promise<void>;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
+};
+
+function createDelay({
+  retryBaseDelayMs = DEFAULT_RETRY_BASE_DELAY_MS,
+  retryMaxDelayMs = DEFAULT_RETRY_MAX_DELAY_MS,
+  delay,
+}: EnsureSupportSchemaOptions): (attempt: number) => Promise<void> {
+  if (delay) {
+    return delay;
+  }
+
+  return async (attempt: number) => {
+    const exponent = Math.min(attempt, 10);
+    const computedDelay = Math.min(
+      retryMaxDelayMs,
+      retryBaseDelayMs * 2 ** exponent,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, computedDelay));
+  };
+}
+
 async function resolveSchemaPath(): Promise<string> {
   if (cachedSchemaPath) {
     return cachedSchemaPath;
@@ -64,13 +96,17 @@ async function executeSchema(client: Queryable): Promise<void> {
   await client.query(sql);
 }
 
-export async function ensureSupportSchema(client: Queryable = pool): Promise<void> {
+export async function ensureSupportSchema(
+  client: Queryable = pool,
+  options: EnsureSupportSchemaOptions = {},
+): Promise<void> {
   if (!initializationPromise) {
-    let shouldReset = false;
+    const delay = createDelay(options);
 
-    const promise = (async () => {
+    const initialize = async (attempt = 0): Promise<void> => {
       try {
         await executeSchema(client);
+        connectionWarningLogged = false;
       } catch (error) {
         const errno = (error as NodeJS.ErrnoException).code;
 
@@ -78,29 +114,23 @@ export async function ensureSupportSchema(client: Queryable = pool): Promise<voi
           if (!connectionWarningLogged) {
             connectionWarningLogged = true;
             console.warn(
-              'Ignorando a criação do esquema de suporte: falha ao conectar ao banco de dados.',
+              'Ignorando a criação do esquema de suporte: falha ao conectar ao banco de dados. Retentando...',
               error,
             );
           }
 
-          shouldReset = true;
-          return;
+          await delay(attempt);
+          return initialize(attempt + 1);
         }
 
         throw error;
       }
-    })()
-      .catch((error) => {
-        initializationPromise = null;
-        throw error;
-      })
-      .finally(() => {
-        if (shouldReset) {
-          initializationPromise = null;
-        }
-      });
+    };
 
-    initializationPromise = promise;
+    initializationPromise = initialize().catch((error) => {
+      initializationPromise = null;
+      throw error;
+    });
   }
 
   await initializationPromise;
