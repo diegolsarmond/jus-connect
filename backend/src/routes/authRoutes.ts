@@ -185,7 +185,7 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *       401:
  *         description: Credenciais inválidas
  */
-router.post('/auth/login', loginRateLimiter, login);
+router.post('/auth/login', loginRateLimiter, supabaseAuthMiddleware, login);
 
 /**
  * @swagger

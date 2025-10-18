@@ -305,7 +305,17 @@ export const loginRequest = async (
     throw new Error("Resposta de autenticação inválida.");
   }
 
-  const authUser = resolveSupabaseMetadata(user, credentials.email);
+  let authUser: AuthUser | null = null;
+
+  try {
+    authUser = resolveSupabaseMetadata(user, credentials.email);
+  } catch (error) {
+    console.warn("Failed to resolve Supabase metadata", error);
+  }
+
+  if (!authUser) {
+    authUser = await fetchCurrentUser(session.access_token);
+  }
 
   return {
     token: session.access_token,

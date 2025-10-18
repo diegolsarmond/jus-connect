@@ -866,6 +866,12 @@ test('login succeeds quando assinatura está ativa via Supabase', async () => {
       supabaseUid,
       email: 'alice@example.com',
     },
+    auth: {
+      userId: 77,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
+    },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -956,6 +962,12 @@ test('login respeita dados de assinatura anual fornecidos pelo Supabase', async 
       supabaseUid,
       email: 'alice@example.com',
     },
+    auth: {
+      userId: 88,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
+    },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -1014,6 +1026,12 @@ test('login rejects when user is inactive', async () => {
       supabaseUid,
       email: 'alice@example.com',
     },
+    auth: {
+      userId: 77,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
+    },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -1057,6 +1075,12 @@ test('login rejects when e-mail confirmation is pending', async () => {
     body: {
       supabaseUid,
       email: 'alice@example.com',
+    },
+    auth: {
+      userId: 78,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
     },
   } as unknown as Request;
 
@@ -1115,6 +1139,12 @@ test('login rejects when subscription payment is pending', async () => {
       supabaseUid,
       email: 'alice@example.com',
     },
+    auth: {
+      userId: 91,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
+    },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -1169,6 +1199,12 @@ test('login rejects when trial period has expired without payment', async () => 
     body: {
       supabaseUid,
       email: 'alice@example.com',
+    },
+    auth: {
+      userId: 88,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
     },
   } as unknown as Request;
 
@@ -1227,6 +1263,12 @@ test('login rejects with payment required once grace period expires', async () =
     body: {
       supabaseUid,
       email: 'alice@example.com',
+    },
+    auth: {
+      userId: 99,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
     },
   } as unknown as Request;
 
@@ -1293,6 +1335,12 @@ test('login ignora hash legacy ao autenticar via Supabase', async () => {
     body: {
       supabaseUid,
       email: 'alice@example.com',
+    },
+    auth: {
+      userId: 171,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
     },
   } as unknown as Request;
 
@@ -1369,6 +1417,12 @@ test('login ignora senhas em texto puro quando autenticado pelo Supabase', async
     body: {
       supabaseUid,
       email: 'alice@example.com',
+    },
+    auth: {
+      userId: 172,
+      email: 'alice@example.com',
+      payload: { sub: supabaseUid },
+      supabaseUserId: supabaseUid,
     },
   } as unknown as Request;
 
