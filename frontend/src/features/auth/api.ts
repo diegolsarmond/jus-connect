@@ -317,6 +317,10 @@ export const loginRequest = async (
     authUser = await fetchCurrentUser(session.access_token);
   }
 
+  if (!authUser) {
+    throw new Error("Não foi possível carregar os dados do usuário.");
+  }
+
   return {
     token: session.access_token,
     expiresIn: session.expires_in ?? undefined,
