@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import Login from "./Login";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ApiError, resendEmailConfirmationRequest } from "@/features/auth/api";
-import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import type { Session, User as SupabaseUser } from "@/integrations/supabase/types";
 
 const toastMock = vi.fn();
 
