@@ -28,6 +28,8 @@ import {
   upsertSyncJobConfiguration,
 } from './syncJobStatusRepository';
 
+const CONNECTION_ERROR_CODES = new Set(['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN']);
+
 export interface ProjudiSyncStatus {
   enabled: boolean;
   running: boolean;
@@ -59,6 +61,7 @@ export interface AsaasSyncStatus {
 export class CronJobsService {
   private readonly projudiService: ProjudiNotificationService;
   private readonly asaasService: AsaasChargeSyncService;
+  private readonly upsertSyncJobConfigurationFn = upsertSyncJobConfiguration;
 
   constructor(
     projudiService: ProjudiNotificationService = projudiNotificationService,
@@ -74,18 +77,44 @@ export class CronJobsService {
       return;
     }
 
-    await upsertSyncJobConfiguration(PROJUDI_SYNC_JOB_NAME, {
-      enabled: true,
-      intervalMs: resolveProjudiIntervalFromEnv(),
-      lookbackMs: resolveProjudiLookbackFromEnv(),
-      overlapMs: resolveProjudiOverlapFromEnv(),
-    });
+    try {
+      await this.upsertSyncJobConfigurationFn(PROJUDI_SYNC_JOB_NAME, {
+        enabled: true,
+        intervalMs: resolveProjudiIntervalFromEnv(),
+        lookbackMs: resolveProjudiLookbackFromEnv(),
+        overlapMs: resolveProjudiOverlapFromEnv(),
+      });
+    } catch (error) {
+      if (
+        this.handleSyncJobConnectionError(
+          error,
+          'Ignorando a configuração do job de sincronização do Projudi: falha ao conectar ao banco de dados.',
+        )
+      ) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async stopProjudiSyncJob(): Promise<void> {
-    await upsertSyncJobConfiguration(PROJUDI_SYNC_JOB_NAME, {
-      enabled: false,
-    });
+    try {
+      await this.upsertSyncJobConfigurationFn(PROJUDI_SYNC_JOB_NAME, {
+        enabled: false,
+      });
+    } catch (error) {
+      if (
+        this.handleSyncJobConnectionError(
+          error,
+          'Ignorando a configuração do job de sincronização do Projudi: falha ao conectar ao banco de dados.',
+        )
+      ) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async triggerProjudiSyncNow(): Promise<{ status: ProjudiSyncStatus; triggered: boolean }> {
@@ -120,16 +149,42 @@ export class CronJobsService {
       return;
     }
 
-    await upsertSyncJobConfiguration(ASAAS_SYNC_JOB_NAME, {
-      enabled: true,
-      intervalMs: resolveAsaasIntervalFromEnv(),
-    });
+    try {
+      await this.upsertSyncJobConfigurationFn(ASAAS_SYNC_JOB_NAME, {
+        enabled: true,
+        intervalMs: resolveAsaasIntervalFromEnv(),
+      });
+    } catch (error) {
+      if (
+        this.handleSyncJobConnectionError(
+          error,
+          'Ignorando a configuração do job de sincronização do Asaas: falha ao conectar ao banco de dados.',
+        )
+      ) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async stopAsaasChargeSyncJob(): Promise<void> {
-    await upsertSyncJobConfiguration(ASAAS_SYNC_JOB_NAME, {
-      enabled: false,
-    });
+    try {
+      await this.upsertSyncJobConfigurationFn(ASAAS_SYNC_JOB_NAME, {
+        enabled: false,
+      });
+    } catch (error) {
+      if (
+        this.handleSyncJobConnectionError(
+          error,
+          'Ignorando a configuração do job de sincronização do Asaas: falha ao conectar ao banco de dados.',
+        )
+      ) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async triggerAsaasSyncNow(): Promise<{ status: AsaasSyncStatus; triggered: boolean }> {
@@ -196,6 +251,17 @@ export class CronJobsService {
       nextRunAt: formatOptionalDate(nextRunAt),
       lastManualTriggerAt: formatOptionalDate(row?.lastManualTriggerAt),
     };
+  }
+
+  private handleSyncJobConnectionError(error: unknown, message: string): boolean {
+    const errno = (error as NodeJS.ErrnoException).code;
+
+    if (errno && CONNECTION_ERROR_CODES.has(errno)) {
+      console.warn(message, error);
+      return true;
+    }
+
+    return false;
   }
 
   private computeNextRunAt(row: SyncJobStatusRow | null, intervalMs: number): Date | null {
