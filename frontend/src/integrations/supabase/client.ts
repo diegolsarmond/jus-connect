@@ -25,9 +25,13 @@ const getEnvValue = (key: string): string | undefined => {
 };
 
 const getSupabaseUrl = () =>
-  getEnvValue("VITE_SUPABASE_URL") ?? getEnvValue("NEXT_PUBLIC_SUPABASE_URL");
+  getEnvValue("VITE_SUPABASE_URL") ??
+  getEnvValue("NEXT_PUBLIC_SUPABASE_URL") ??
+  getEnvValue("SUPABASE_URL");
 const getSupabaseKey = () =>
-  getEnvValue("VITE_SUPABASE_ANON_KEY") ?? getEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  getEnvValue("VITE_SUPABASE_ANON_KEY") ??
+  getEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY") ??
+  getEnvValue("SUPABASE_ANON_KEY");
 
 const storageKey = "jus-connect:supabase:session";
 
