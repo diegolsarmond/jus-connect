@@ -108,4 +108,30 @@ describe("supabase client", () => {
 
     expect(supabase).toBeDefined();
   });
+
+  it("retorna erro claro quando não há configuração", async () => {
+    process.env = { ...originalEnv };
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_ANON_KEY;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { supabase } = await import("./client");
+
+    const result = await supabase.auth.signInWithPassword({ email: "user@example.com", password: "secret" });
+    expect(result.error?.message).toBe("Configurações do Supabase não encontradas");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const sessionResult = await supabase.auth.getSession();
+    expect(sessionResult.data.session).toBeNull();
+
+    await supabase.auth.signOut();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
 });

@@ -162,9 +162,12 @@ const notifyListeners = (event: AuthChangeEvent, session: Session | null) => {
 
 const supabaseUrl = getSupabaseUrl();
 const supabaseKey = getSupabaseKey();
+const supabaseConfigured =
+  typeof supabaseUrl === "string" && supabaseUrl.length > 0 && typeof supabaseKey === "string" && supabaseKey.length > 0;
+const missingConfigurationError: AuthError = { message: "Configurações do Supabase não encontradas" };
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Configurações do Supabase não encontradas");
+if (!supabaseConfigured) {
+  console.error("Configurações do Supabase não encontradas");
 }
 
 let currentSession: Session | null = readSessionFromStorage();
@@ -179,6 +182,9 @@ const clearAutoRefresh = () => {
 };
 
 const scheduleAutoRefresh = (session: Session | null) => {
+  if (!supabaseConfigured) {
+    return;
+  }
   clearAutoRefresh();
   if (!session?.expires_at || !session.refresh_token) {
     return;
@@ -191,10 +197,10 @@ const scheduleAutoRefresh = (session: Session | null) => {
 };
 
 const buildHeaders = (token?: string) => {
-  const headers = new Headers({
-    apikey: supabaseKey,
-    Accept: "application/json",
-  });
+  const headers = new Headers({ Accept: "application/json" });
+  if (supabaseKey) {
+    headers.set("apikey", supabaseKey);
+  }
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
@@ -202,7 +208,7 @@ const buildHeaders = (token?: string) => {
 };
 
 const shouldRefreshSession = (session: Session | null) => {
-  if (!session?.expires_at) {
+  if (!supabaseConfigured || !session?.expires_at) {
     return false;
   }
   const now = Math.floor(Date.now() / 1000);
@@ -210,6 +216,9 @@ const shouldRefreshSession = (session: Session | null) => {
 };
 
 async function refreshSession(refreshToken: string | null, silent?: boolean): Promise<AuthResponse | null> {
+  if (!supabaseConfigured) {
+    return null;
+  }
   if (!refreshToken) {
     return null;
   }
@@ -248,6 +257,9 @@ async function refreshSession(refreshToken: string | null, silent?: boolean): Pr
 
 const createAuthClient = (): SupabaseLikeClient["auth"] => ({
   async signInWithPassword(credentials: SignInWithPasswordCredentials) {
+    if (!supabaseConfigured) {
+      return { data: { session: null, user: null }, error: missingConfigurationError };
+    }
     const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: buildHeaders(),
@@ -271,6 +283,9 @@ const createAuthClient = (): SupabaseLikeClient["auth"] => ({
     return { data, error: null };
   },
   async getSession() {
+    if (!supabaseConfigured) {
+      return { data: { session: null }, error: null };
+    }
     if (!currentSession) {
       currentSession = readSessionFromStorage();
     }
@@ -285,6 +300,9 @@ const createAuthClient = (): SupabaseLikeClient["auth"] => ({
     return { data: { session: currentSession }, error: null };
   },
   async signOut() {
+    if (!supabaseConfigured) {
+      return { error: null };
+    }
     const session = currentSession;
 
     if (session) {
@@ -323,9 +341,14 @@ const createAuthClient = (): SupabaseLikeClient["auth"] => ({
 
 const createFunctionsClient = (): SupabaseLikeClient["functions"] => ({
   async invoke(functionName, options = {}) {
+    if (!supabaseConfigured || !supabaseUrl) {
+      return { data: null, error: missingConfigurationError };
+    }
     const url = `${supabaseUrl}/functions/v1/${functionName}`;
     const headers = new Headers(options.headers ?? {});
-    headers.set("apikey", supabaseKey);
+    if (supabaseKey) {
+      headers.set("apikey", supabaseKey);
+    }
     if (currentSession?.access_token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${currentSession.access_token}`);
     }
