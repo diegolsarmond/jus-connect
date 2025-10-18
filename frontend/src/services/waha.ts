@@ -95,7 +95,20 @@ const DEFAULT_WAHA_SESSION = (
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
+const pickFirstString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (isNonEmptyString(value)) {
+      return value.trim();
+    }
+  }
+  return undefined;
+};
+
 const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '');
+
+const isSafeBlobUrl = (value: string): boolean => /^(blob:|data:)/i.test(value);
+
+const createObjectUrlFromBlob = (blob: Blob): string => URL.createObjectURL(blob);
 
 type IntegrationApiKeyPayload = {
   apiUrl?: unknown;
@@ -410,6 +423,51 @@ const sanitizeChatOverview = (raw: unknown): ChatOverview | null => {
     isGroup: id.includes('@g.us'),
     unreadCount: typeof unreadCount === 'number' ? unreadCount : 0,
   };
+
+  const presenceRecord = isRawRecord(raw['presence']) ? raw['presence'] : null;
+  const isOnline =
+    readBoolean(raw, 'isOnline') ??
+    readBoolean(raw, 'online') ??
+    (presenceRecord ? readBoolean(presenceRecord, 'isOnline') ?? readBoolean(presenceRecord, 'online') : undefined);
+
+  if (typeof isOnline === 'boolean') {
+    overview.isOnline = isOnline;
+  }
+
+  const presenceStatus = pickFirstString(
+    readString(raw, 'presence'),
+    readString(raw, 'presenceStatus'),
+    readString(raw, 'status'),
+    readString(raw, 'availability'),
+    presenceRecord ? readString(presenceRecord, 'presence') : undefined,
+    presenceRecord ? readString(presenceRecord, 'status') : undefined,
+    presenceRecord ? readString(presenceRecord, 'state') : undefined,
+  );
+
+  if (presenceStatus) {
+    overview.presence = presenceStatus;
+  }
+
+  const lastSeenCandidates = [
+    raw['lastSeen'],
+    raw['last_seen'],
+    raw['lastSeenAt'],
+    raw['lastSeenTs'],
+    raw['lastSeenTimestamp'],
+    raw['lastOnline'],
+    presenceRecord ? presenceRecord['lastSeen'] : undefined,
+    presenceRecord ? presenceRecord['last_seen'] : undefined,
+    presenceRecord ? presenceRecord['lastSeenAt'] : undefined,
+    presenceRecord ? presenceRecord['timestamp'] : undefined,
+  ];
+
+  for (const candidate of lastSeenCandidates) {
+    const normalized = normalizeTimestamp(candidate);
+    if (typeof normalized === 'number') {
+      overview.lastSeen = normalized;
+      break;
+    }
+  }
 
   const resolvedAvatar = avatar ?? picture;
   if (resolvedAvatar) {
@@ -785,6 +843,14 @@ class WAHAService {
     });
   }
 
+  async deleteChat(chatId: string): Promise<WAHAResponse<void>> {
+    const config = await this.getResolvedConfig();
+    const encodedId = encodeURIComponent(chatId);
+    return this.makeRequest<void>(`/api/${config.session}/chats/${encodedId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Get chat info
   async getChatInfo(chatId: string): Promise<WAHAResponse<Record<string, unknown>>> {
     const config = await this.getResolvedConfig();
@@ -812,9 +878,88 @@ class WAHAService {
 
   // Get webhook URL that should be configured in WAHA
   getWebhookUrl(baseUrl: string): string {
-    return `${baseUrl}/api/webhook/waha`;
+    return `${baseUrl}/api/webhooks/waha`;
   }
 }
 
 export const wahaService = new WAHAService();
+
+const resolveMediaRequestUrl = (baseUrl: string, mediaUrl: string): string | null => {
+  const trimmed = mediaUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const resolved = new URL(trimmed, baseUrl);
+    return resolved.toString();
+  } catch (error) {
+    console.error('Failed to resolve WAHA media URL', error);
+    return null;
+  }
+};
+
+const isSameOrigin = (baseUrl: string, targetUrl: string): boolean => {
+  try {
+    const base = new URL(baseUrl);
+    const target = new URL(targetUrl);
+    return base.origin === target.origin;
+  } catch (error) {
+    console.error('Failed to compare WAHA media origin', error);
+    return false;
+  }
+};
+
+export const downloadMediaBlob = async (mediaUrl: string): Promise<string> => {
+  if (typeof mediaUrl !== 'string') {
+    throw new Error('URL de mídia inválida.');
+  }
+
+  const trimmed = mediaUrl.trim();
+  if (!trimmed) {
+    throw new Error('URL de mídia inválida.');
+  }
+
+  if (isSafeBlobUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const config = await wahaService.getResolvedConfig();
+  const resolvedUrl = resolveMediaRequestUrl(config.baseUrl, trimmed);
+
+  if (!resolvedUrl) {
+    return trimmed;
+  }
+
+  if (!isSameOrigin(config.baseUrl, resolvedUrl)) {
+    return trimmed;
+  }
+
+  const response = await fetch(resolvedUrl, {
+    headers: {
+      'X-Api-Key': config.apiKey,
+    },
+  });
+
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (!response.ok || JSON_CONTENT_TYPE_REGEX.test(contentType)) {
+    const bodyText = await response.text();
+
+    if (!response.ok) {
+      const message = buildWahaErrorMessage(response.status, bodyText);
+      throw new WAHARequestError(message, response.status);
+    }
+
+    const message = extractWahaErrorMessage(bodyText, response.status ?? 200);
+    throw new WAHARequestError(
+      message || 'Resposta inválida ao baixar mídia do WAHA.',
+      response.status,
+    );
+  }
+
+  const blob = await response.blob();
+  return createObjectUrlFromBlob(blob);
+};
+
 export default WAHAService;

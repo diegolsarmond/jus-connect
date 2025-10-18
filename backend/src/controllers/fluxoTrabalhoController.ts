@@ -33,7 +33,9 @@ export const listFluxosTrabalho = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json([]);
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -44,7 +46,7 @@ export const listFluxosTrabalho = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -67,7 +69,9 @@ export const listFluxoTrabalhoMenus = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json([]);
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -81,7 +85,7 @@ export const listFluxoTrabalhoMenus = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -108,7 +112,7 @@ export const createFluxoTrabalho = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
@@ -120,7 +124,7 @@ export const createFluxoTrabalho = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -138,7 +142,7 @@ export const updateFluxoTrabalho = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -155,6 +159,6 @@ export const deleteFluxoTrabalho = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

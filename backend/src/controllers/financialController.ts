@@ -392,13 +392,20 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 
 };
 
+let createAsaasClientImplementation = createAsaasClient;
+
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
   resetFinancialFlowEmpresaColumnCache,
   resetFinancialFlowClienteColumnCache,
   resetFinancialFlowFornecedorColumnCache,
   resetFinancialAccountTableCache,
-
+  setCreateAsaasClientImplementation(implementation: typeof createAsaasClient) {
+    createAsaasClientImplementation = implementation;
+  },
+  resetCreateAsaasClientImplementation() {
+    createAsaasClientImplementation = createAsaasClient;
+  },
 };
 
 const asaasChargeService = new AsaasChargeService();
@@ -875,12 +882,9 @@ export const listFlows = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json({
-        items: [],
-        total: 0,
-        page: effectivePage,
-        limit: effectiveLimit,
-      });
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -1242,7 +1246,7 @@ ${baseFinancialFlowsSelect}
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1258,7 +1262,7 @@ export const getFlow = async (req: Request, res: Response) => {
     res.json({ flow: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1306,7 +1310,9 @@ export const createFlow = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário não está vinculado a uma empresa.' });
     return;
   }
 
@@ -1416,7 +1422,7 @@ export const createFlow = async (req: Request, res: Response) => {
       return;
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     if (client) {
       client.release();
@@ -1511,7 +1517,7 @@ export const updateFlow = async (req: Request, res: Response) => {
       return res.status(409).json({ error: err.message });
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -1529,7 +1535,7 @@ export const deleteFlow = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1631,7 +1637,9 @@ const settleOpportunityInstallment = async (
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1713,7 +1721,7 @@ const settleOpportunityInstallment = async (
     res.json({ parcela: updateResult.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1749,7 +1757,7 @@ export const settleFlow = async (req: Request, res: Response) => {
     res.json({ flow: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1832,7 +1840,7 @@ export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
         .json({ error: 'O fluxo financeiro já possui uma cobrança vinculada ao Asaas' });
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -1861,7 +1869,9 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1944,7 +1954,7 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
       return;
     }
 
-    const asaasClient = await createAsaasClient(flowEmpresaId, client);
+    const asaasClient = await createAsaasClientImplementation(flowEmpresaId, client);
     const refundResponse = await asaasClient.refundCharge(chargeRow.asaas_charge_id, refundPayload);
 
     const updatedChargeResult = await client.query(
@@ -1999,7 +2009,7 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -2020,16 +2030,34 @@ export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Charge not found' });
     }
 
-    const chargePayload: Record<string, unknown> = { ...charge };
+    const sanitizedCharge: Record<string, unknown> = {
+      id: charge.id,
+      financialFlowId: charge.financialFlowId,
+      clienteId: charge.clienteId,
+      integrationApiKeyId: charge.integrationApiKeyId,
+      asaasChargeId: charge.asaasChargeId,
+      billingType: charge.billingType,
+      status: charge.status,
+      dueDate: charge.dueDate,
+      value: charge.value,
+      invoiceUrl: charge.invoiceUrl,
+      pixPayload: charge.pixPayload,
+      pixQrCode: charge.pixQrCode,
+      boletoUrl: charge.boletoUrl,
+      cardLast4: charge.cardLast4,
+      cardBrand: charge.cardBrand,
+      createdAt: charge.createdAt,
+      updatedAt: charge.updatedAt,
+    };
 
     if (typeof charge.financialFlowId === 'number') {
-      chargePayload.flowId = charge.financialFlowId;
+      sanitizedCharge.flowId = charge.financialFlowId;
     }
 
-    res.json({ charge: chargePayload });
+    res.json({ charge: sanitizedCharge });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2067,6 +2095,6 @@ export const listAsaasChargeStatus = async (req: Request, res: Response) => {
     res.json({ statuses });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

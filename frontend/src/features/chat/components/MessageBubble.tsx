@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useState, type SyntheticEvent } from "react";
 import { CheckCheck, Download, FileText } from "lucide-react";
 import clsx from "clsx";
 import type { Message } from "../types";
@@ -14,6 +14,48 @@ interface MessageBubbleProps {
 
 export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
   ({ message, isOwnMessage, isFirstOfGroup, avatarUrl }, ref) => {
+    const [audioDurations, setAudioDurations] = useState<Record<string, string>>({});
+
+    const formatDuration = (seconds: number) => {
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        return null;
+      }
+
+      const totalSeconds = Math.round(seconds);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const remainingSeconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        const minutesString = minutes.toString().padStart(2, "0");
+        const secondsString = remainingSeconds.toString().padStart(2, "0");
+        return `${hours}:${minutesString}:${secondsString}`;
+      }
+
+      const secondsString = remainingSeconds.toString().padStart(2, "0");
+      return `${minutes}:${secondsString}`;
+    };
+
+    useEffect(() => {
+      setAudioDurations({});
+    }, [message.id]);
+
+    const handleAudioMetadata = (attachmentId: string) => (
+      event: SyntheticEvent<HTMLAudioElement>,
+    ) => {
+      const formatted = formatDuration(event.currentTarget.duration);
+      if (formatted) {
+        setAudioDurations((prev) => {
+          if (prev[attachmentId] === formatted) {
+            return prev;
+          }
+
+          return { ...prev, [attachmentId]: formatted };
+        });
+      }
+    };
+
+    const audioDurationValues = Object.values(audioDurations);
     const containerClass = clsx(styles.row, isOwnMessage ? styles.outgoing : styles.incoming, {
       [styles.grouped]: !isFirstOfGroup,
     });
@@ -30,6 +72,7 @@ export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
         <div className={styles.bubble}>
           {message.attachments?.map((attachment) => {
             if (attachment.type === "audio") {
+              const resolvedUrl = attachment.downloadUrl ?? attachment.url;
               return (
                 <div key={attachment.id} className={styles.audioWrapper}>
                   <audio
@@ -37,9 +80,19 @@ export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
                     src={attachment.url}
                     className={styles.audioPlayer}
                     aria-label={`Mensagem de áudio ${attachment.name}`}
+                    onLoadedMetadata={handleAudioMetadata(attachment.id)}
                   >
                     Seu navegador não suporta a reprodução de áudio.
                   </audio>
+                  {resolvedUrl && (
+                    <a
+                      href={resolvedUrl}
+                      download={attachment.name || ''}
+                      className={styles.audioDownload}
+                    >
+                      Baixar áudio
+                    </a>
+                  )}
                   {attachment.name && (
                     <span className={styles.attachmentCaption}>{attachment.name}</span>
                   )}
@@ -110,6 +163,11 @@ export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
             <p className={styles.text}>{message.content}</p>
           )}
           <div className={styles.meta}>
+            {audioDurationValues.length > 0 && (
+              <span className={styles.duration} aria-label="Duração do áudio">
+                {audioDurationValues.join(" / ")}
+              </span>
+            )}
             <time dateTime={message.timestamp}>{formatMessageTimestamp(message.timestamp)}</time>
             {isOwnMessage && (
               <span className={styles.statusIcon} aria-label={`Status: ${message.status}`}>

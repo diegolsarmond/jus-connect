@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import AsaasCustomerService, { ClienteLocalData } from '../services/asaasCustomerService';
 import pool from '../services/db';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { ensureAuthenticatedEmpresaId } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const asaasCustomerService = new AsaasCustomerService();
 
@@ -35,22 +35,11 @@ export const getAsaasCustomerStatus = async (req: Request, res: Response) => {
   }
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(400)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res, {
+      empresaNaoVinculadaStatus: 400,
+    });
+    if (empresaId === undefined) {
+      return;
     }
 
     const clienteResult = await pool.query(
@@ -66,7 +55,7 @@ export const getAsaasCustomerStatus = async (req: Request, res: Response) => {
     return res.json(status);
   } catch (error) {
     console.error('Falha ao recuperar status do cliente Asaas:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -80,22 +69,11 @@ export const syncAsaasCustomerNow = async (req: Request, res: Response) => {
   }
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(400)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res, {
+      empresaNaoVinculadaStatus: 400,
+    });
+    if (empresaId === undefined) {
+      return;
     }
 
     const clienteResult = await pool.query(
@@ -143,6 +121,6 @@ export const syncAsaasCustomerNow = async (req: Request, res: Response) => {
     return res.json(status);
   } catch (error) {
     console.error('Falha ao sincronizar cliente com o Asaas imediatamente:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

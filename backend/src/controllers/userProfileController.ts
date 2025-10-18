@@ -173,3 +173,129 @@ export const revokeAllMySessions = async (req: Request, res: Response) => {
     handleControllerError(res, error);
   }
 };
+
+const extractCodeFromBody = (body: unknown): string | null => {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const value = (body as { code?: unknown }).code;
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+export const initiateMyTwoFactor = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  try {
+    const performer = extractPerformer(req);
+    const result = await service.initiateTwoFactor(userId, performer);
+    res.json(result);
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+};
+
+export const confirmMyTwoFactor = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const code = extractCodeFromBody(req.body);
+  if (!code) {
+    res.status(400).json({ error: 'Informe o código de verificação.' });
+    return;
+  }
+
+  try {
+    const performer = extractPerformer(req);
+    const result = await service.confirmTwoFactor(userId, code, performer);
+    res.json(result);
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+};
+
+export const disableMyTwoFactor = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const code = extractCodeFromBody(req.body);
+  if (!code) {
+    res.status(400).json({ error: 'Informe o código para desativar o 2FA.' });
+    return;
+  }
+
+  try {
+    const performer = extractPerformer(req);
+    await service.disableTwoFactor(userId, code, performer);
+    res.status(204).send();
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+};
+
+export const approveMyDevice = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const sessionId = Number.parseInt(req.params.sessionId, 10);
+  if (!Number.isInteger(sessionId) || sessionId <= 0) {
+    res.status(400).json({ error: 'Sessão inválida.' });
+    return;
+  }
+
+  try {
+    const performer = extractPerformer(req);
+    const session = await service.approveSession(userId, sessionId, performer);
+    if (!session) {
+      res.status(404).json({ error: 'Sessão não encontrada ou já aprovada.' });
+      return;
+    }
+    res.json(session);
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+};
+
+export const revokeMyDeviceApproval = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const sessionId = Number.parseInt(req.params.sessionId, 10);
+  if (!Number.isInteger(sessionId) || sessionId <= 0) {
+    res.status(400).json({ error: 'Sessão inválida.' });
+    return;
+  }
+
+  try {
+    const performer = extractPerformer(req);
+    const session = await service.revokeSessionApproval(userId, sessionId, performer);
+    if (!session) {
+      res.status(404).json({ error: 'Sessão não encontrada ou já revogada.' });
+      return;
+    }
+    res.json(session);
+  } catch (error) {
+    handleControllerError(res, error);
+  }
+};

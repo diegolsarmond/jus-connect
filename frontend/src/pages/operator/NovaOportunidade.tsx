@@ -33,8 +33,36 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { getApiBaseUrl } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ChevronsUpDown, Check, UserPlus } from "lucide-react";
 
-const formSchema = z.object({
+const valorEntradaMaiorQueHonorariosMensagem =
+  "O valor de entrada deve ser menor ou igual ao valor dos honorários";
+
+const parseCurrencyValue = (value: string | null | undefined) => {
+  const digits = (value || "").replace(/\D/g, "");
+  return digits ? Number(digits) / 100 : null;
+};
+
+const formSchema = z
+  .object({
   tipo_processo: z.string().min(1, "Tipo de Processo é obrigatório"),
   area_atuacao: z.string().optional(),
   responsavel_interno: z.string().optional(),
@@ -79,7 +107,23 @@ const formSchema = z.object({
   criado_por: z.string().optional(),
   data_criacao: z.string().optional(),
   ultima_atualizacao: z.string().optional(),
-});
+  })
+  .superRefine((data, ctx) => {
+    const valorEntrada = parseCurrencyValue(data.valor_entrada);
+    const valorHonorarios = parseCurrencyValue(data.valor_honorarios);
+
+    if (
+      valorEntrada !== null &&
+      valorHonorarios !== null &&
+      valorEntrada > valorHonorarios
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["valor_entrada"],
+        message: valorEntradaMaiorQueHonorariosMensagem,
+      });
+    }
+  });
 
 interface Option {
   id: string;
@@ -224,6 +268,23 @@ export default function NovaOportunidade() {
   const [fluxos, setFluxos] = useState<Option[]>([]);
   const [etapas, setEtapas] = useState<Option[]>([]);
   const [situacoes, setSituacoes] = useState<Option[]>([]);
+  const [isClientPopoverOpen, setIsClientPopoverOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+  const [isCreateClientDialogOpen, setIsCreateClientDialogOpen] = useState(false);
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [newClientType, setNewClientType] = useState<"pf" | "pj">("pf");
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientDocument, setNewClientDocument] = useState("");
+  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
+  const newClientDocumentDigits = useMemo(
+    () => extractDigits(newClientDocument),
+    [newClientDocument]
+  );
+  const newClientPhoneDigits = useMemo(
+    () => extractDigits(newClientPhone),
+    [newClientPhone]
+  );
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -278,6 +339,19 @@ export default function NovaOportunidade() {
     append: addEnvolvido,
     remove: removeEnvolvido,
   } = useFieldArray({ control: form.control, name: "envolvidos" });
+  const solicitanteId = form.watch("solicitante_id");
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === solicitanteId) ?? null,
+    [clients, solicitanteId]
+  );
+  const isNewClientDocumentValid =
+    newClientType === "pj"
+      ? newClientDocumentDigits.length === 14
+      : newClientDocumentDigits.length === 11;
+  const canSubmitNewClient =
+    newClientName.trim().length > 0 &&
+    isNewClientDocumentValid &&
+    !isCreatingClient;
 
   const fetchJson = async (url: string): Promise<unknown[]> => {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -295,6 +369,15 @@ export default function NovaOportunidade() {
   };
 
   const areaAtuacaoWatch = form.watch("area_atuacao");
+
+  useEffect(() => {
+    if (!isClientPopoverOpen) {
+      return;
+    }
+
+    const currentName = form.getValues("solicitante_nome") || "";
+    setClientSearch(currentName);
+  }, [form, isClientPopoverOpen]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -472,10 +555,7 @@ export default function NovaOportunidade() {
     loadEtapas();
   }, [faseValue, apiUrl]);
 
-  const parseCurrency = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    return digits ? Number(digits) / 100 : null;
-  };
+  const parseCurrency = (value: string) => parseCurrencyValue(value);
 
   const parsePercent = (value: string) => {
     const digits = value.replace(/\D/g, "");
@@ -566,6 +646,22 @@ export default function NovaOportunidade() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      const valorEntrada = parseCurrency(values.valor_entrada || "");
+      const valorHonorarios = parseCurrency(values.valor_honorarios || "");
+
+      if (
+        valorEntrada !== null &&
+        valorHonorarios !== null &&
+        valorEntrada > valorHonorarios
+      ) {
+        form.setError(
+          "valor_entrada",
+          { type: "manual", message: valorEntradaMaiorQueHonorariosMensagem },
+          { shouldFocus: true }
+        );
+        return;
+      }
+
       const isProcessoDistribuido = values.processo_distribuido === "sim";
       const solicitanteIdRaw = values.solicitante_id?.trim();
       const solicitanteId =
@@ -650,37 +746,125 @@ export default function NovaOportunidade() {
     }
   };
 
-  const handleSelectClient = (name: string) => {
-    const normalizedName = name.trim();
-    const client = clients.find((c) => c.name === normalizedName);
+  const applyClientSelection = (client: ClientOption | null) => {
     if (client) {
       form.setValue("solicitante_id", client.id, {
         shouldDirty: true,
         shouldTouch: true,
       });
-      form.setValue("solicitante_cpf_cnpj", extractDigits(client.cpf_cnpj || ""));
-      form.setValue("solicitante_email", client.email || "");
-      form.setValue("solicitante_telefone", extractDigits(client.telefone || ""));
-      form.setValue("cliente_tipo", client.tipo || "");
       form.setValue("solicitante_nome", client.name, {
         shouldDirty: true,
         shouldTouch: true,
       });
-    } else {
-      form.setValue("solicitante_id", "", {
-        shouldDirty: true,
-        shouldTouch: true,
+      form.setValue(
+        "solicitante_cpf_cnpj",
+        extractDigits(client.cpf_cnpj || "")
+      );
+      form.setValue("solicitante_email", client.email || "");
+      form.setValue(
+        "solicitante_telefone",
+        extractDigits(client.telefone || "")
+      );
+      form.setValue("cliente_tipo", client.tipo || "");
+      setClientSearch(client.name);
+      return;
+    }
+
+    form.setValue("solicitante_id", "", {
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+    form.setValue("solicitante_nome", "", {
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+    form.setValue("solicitante_cpf_cnpj", "");
+    form.setValue("solicitante_email", "");
+    form.setValue("solicitante_telefone", "");
+    form.setValue("cliente_tipo", "");
+    setClientSearch("");
+  };
+
+  const openCreateClientDialog = (name?: string) => {
+    const trimmed = name?.trim() || "";
+    setNewClientName(trimmed);
+    setNewClientDocument("");
+    setNewClientEmail("");
+    setNewClientPhone("");
+    setIsCreateClientDialogOpen(true);
+  };
+
+  const handleCreateClient = async () => {
+    const trimmedName = newClientName.trim();
+
+    if (!trimmedName || !isNewClientDocumentValid) {
+      return;
+    }
+
+    try {
+      setIsCreatingClient(true);
+
+      const res = await fetch(`${apiUrl}/api/clientes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: trimmedName,
+          tipo: newClientType === "pj" ? 2 : 1,
+          documento: newClientDocumentDigits,
+          email: newClientEmail || null,
+          telefone: newClientPhoneDigits || null,
+          cep: null,
+          rua: null,
+          numero: null,
+          complemento: null,
+          bairro: null,
+          cidade: null,
+          uf: null,
+          ativo: true,
+        }),
       });
-      if (normalizedName.length === 0) {
-        form.setValue("solicitante_nome", "", {
-          shouldDirty: true,
-          shouldTouch: true,
-        });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        const message =
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Erro ao criar cliente";
+        throw new Error(message);
       }
-      form.setValue("solicitante_cpf_cnpj", "");
-      form.setValue("solicitante_email", "");
-      form.setValue("solicitante_telefone", "");
-      form.setValue("cliente_tipo", "");
+
+      const data = await res.json();
+      const newClient: ClientOption = {
+        id: String(data.id),
+        name: data.nome,
+        cpf_cnpj: extractDigits(data.documento ?? ""),
+        email: data.email ?? "",
+        telefone: extractDigits(data.telefone ?? ""),
+        tipo:
+          data.tipo === 2 || data.tipo === "2"
+            ? "Pessoa Jurídica"
+            : "Pessoa Física",
+      };
+
+      setClients((prev) => {
+        const merged = [...prev.filter((c) => c.id !== newClient.id), newClient];
+        return merged.sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+        );
+      });
+
+      applyClientSelection(newClient);
+      setIsCreateClientDialogOpen(false);
+      toast({ title: "Cliente cadastrado com sucesso" });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title:
+          error instanceof Error ? error.message : "Erro ao criar cliente",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingClient(false);
     }
   };
 
@@ -809,20 +993,128 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Nome</FormLabel>
                             <FormControl>
-                              <Input
-                                list="solicitante-options"
-                                {...field}
-                                onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                  handleSelectClient(e.target.value);
-                                }}
-                              />
+                              <Popover
+                                open={isClientPopoverOpen}
+                                onOpenChange={setIsClientPopoverOpen}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={isClientPopoverOpen}
+                                    className="w-full justify-between"
+                                  >
+                                    {field.value
+                                      ? field.value
+                                      : "Selecione um cliente"}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                  <Command>
+                                    <CommandInput
+                                      placeholder="Buscar cliente..."
+                                      value={clientSearch}
+                                      onValueChange={setClientSearch}
+                                    />
+                                    <CommandList>
+                                      <CommandEmpty>
+                                        <div className="space-y-2 p-3 text-sm text-muted-foreground">
+                                          <span>Nenhum cliente encontrado.</span>
+                                          {clientSearch.trim() ? (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              onClick={() => {
+                                                setIsClientPopoverOpen(false);
+                                                openCreateClientDialog(clientSearch.trim());
+                                              }}
+                                            >
+                                              <UserPlus className="mr-2 h-4 w-4" />
+                                              <span>
+                                                Cadastrar "{clientSearch.trim()}"
+                                              </span>
+                                            </Button>
+                                          ) : null}
+                                        </div>
+                                      </CommandEmpty>
+                                      <CommandGroup>
+                                        <CommandItem
+                                          value="__none"
+                                          onSelect={() => {
+                                            applyClientSelection(null);
+                                            setIsClientPopoverOpen(false);
+                                            field.onBlur();
+                                          }}
+                                        >
+                                          <span>Sem cliente</span>
+                                          <Check
+                                            className={`ml-auto h-4 w-4 ${
+                                              selectedClient ? "opacity-0" : "opacity-100"
+                                            }`}
+                                          />
+                                        </CommandItem>
+                                        {clients.map((client) => {
+                                          const searchable = [
+                                            client.name,
+                                            client.cpf_cnpj,
+                                            client.email,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" ");
+                                          const isSelected =
+                                            selectedClient?.id === client.id;
+                                          return (
+                                            <CommandItem
+                                              key={client.id}
+                                              value={searchable}
+                                              onSelect={() => {
+                                                applyClientSelection(client);
+                                                setIsClientPopoverOpen(false);
+                                                field.onBlur();
+                                              }}
+                                            >
+                                              <div className="flex flex-col">
+                                                <span className="font-medium leading-snug">
+                                                  {client.name}
+                                                </span>
+                                                {client.email ? (
+                                                  <span className="text-xs text-muted-foreground">
+                                                    {client.email}
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                              <Check
+                                                className={`ml-auto h-4 w-4 ${
+                                                  isSelected
+                                                    ? "opacity-100"
+                                                    : "opacity-0"
+                                                }`}
+                                              />
+                                            </CommandItem>
+                                          );
+                                        })}
+                                        <CommandItem
+                                          value={
+                                            clientSearch.trim()
+                                              ? `cadastrar ${clientSearch.trim()}`
+                                              : "cadastrar novo cliente"
+                                          }
+                                          onSelect={() => {
+                                            setIsClientPopoverOpen(false);
+                                            openCreateClientDialog(clientSearch.trim());
+                                          }}
+                                        >
+                                          <UserPlus className="mr-2 h-4 w-4" />
+                                          <span>Cadastrar novo cliente</span>
+                                        </CommandItem>
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                             </FormControl>
-                            <datalist id="solicitante-options">
-                              {clients.map((c) => (
-                                <option key={c.id} value={c.name} />
-                              ))}
-                            </datalist>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1098,31 +1390,6 @@ export default function NovaOportunidade() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
-                        name="tipo_processo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tipo de Processo</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {tipos.map((t) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    {t.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
                         name="area_atuacao"
                         render={({ field }) => (
                           <FormItem>
@@ -1137,6 +1404,31 @@ export default function NovaOportunidade() {
                                 {areas.map((a) => (
                                   <SelectItem key={a.id} value={a.id}>
                                     {a.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="tipo_processo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tipo de Processo</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {tipos.map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1547,6 +1839,124 @@ export default function NovaOportunidade() {
           </Form>
         </CardContent>
       </Card>
+      <Dialog
+        open={isCreateClientDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateClientDialogOpen(open);
+          if (!open) {
+            setIsCreatingClient(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo cliente</DialogTitle>
+            <DialogDescription>
+              Cadastre um cliente sem sair da tela de oportunidade.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Tipo de cliente</Label>
+              <Select
+                value={newClientType}
+                onValueChange={(value) => {
+                  const normalized = value === "pj" ? "pj" : "pf";
+                  setNewClientType(normalized);
+                  if (normalized === "pf") {
+                    setNewClientDocument(
+                      formatCpfCnpj(newClientDocumentDigits.slice(0, 11))
+                    );
+                  } else {
+                    setNewClientDocument(
+                      formatCpfCnpj(newClientDocumentDigits)
+                    );
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pf">Pessoa Física</SelectItem>
+                  <SelectItem value="pj">Pessoa Jurídica</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="Nome completo ou razão social"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CPF/CNPJ</Label>
+              <Input
+                value={newClientDocument}
+                onChange={(e) => {
+                  const digits = extractDigits(e.target.value);
+                  if (newClientType === "pj") {
+                    setNewClientDocument(formatCpfCnpj(digits));
+                  } else {
+                    setNewClientDocument(
+                      formatCpfCnpj(digits.slice(0, 11))
+                    );
+                  }
+                }}
+                placeholder={
+                  newClientType === "pj"
+                    ? "00.000.000/0000-00"
+                    : "000.000.000-00"
+                }
+              />
+              {!isNewClientDocumentValid &&
+              newClientDocumentDigits.length > 0 ? (
+                <p className="text-xs text-destructive">
+                  {newClientType === "pj"
+                    ? "Informe um CNPJ válido com 14 dígitos."
+                    : "Informe um CPF válido com 11 dígitos."}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input
+                type="email"
+                value={newClientEmail}
+                onChange={(e) => setNewClientEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input
+                value={newClientPhone}
+                onChange={(e) => setNewClientPhone(formatPhone(e.target.value))}
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCreateClientDialogOpen(false)}
+              disabled={isCreatingClient}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateClient}
+              disabled={!canSubmitNewClient}
+            >
+              {isCreatingClient ? "Salvando..." : "Cadastrar cliente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

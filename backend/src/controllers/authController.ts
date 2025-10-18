@@ -2,12 +2,11 @@ import { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import pool from '../services/db';
 import { hashPassword, verifyPassword } from '../utils/passwordUtils';
-import { signToken } from '../utils/tokenUtils';
-import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
 import { SYSTEM_MODULES, normalizeModuleId, sortModules } from '../constants/modules';
 import {
   calculateTrialEnd,
+  parseCadence,
   resolvePlanCadence,
   resolveSubscriptionPayloadFromRow,
   type SubscriptionCadence,
@@ -19,9 +18,39 @@ import {
 } from '../services/emailConfirmationService';
 import { createPasswordResetRequest } from '../services/passwordResetService';
 import { isUndefinedTableError } from '../utils/databaseErrors';
+import {
+  SUBSCRIPTION_DEFAULT_GRACE_DAYS,
+  SUBSCRIPTION_GRACE_DAYS_ANNUAL,
+  SUBSCRIPTION_GRACE_DAYS_MONTHLY,
+  SUBSCRIPTION_TRIAL_DAYS,
+} from '../constants/subscription';
 
-const TRIAL_DURATION_DAYS = 14;
-const GRACE_PERIOD_DAYS = 10;
+const TRIAL_DURATION_DAYS = SUBSCRIPTION_TRIAL_DAYS;
+const GRACE_PERIOD_DAYS = SUBSCRIPTION_DEFAULT_GRACE_DAYS;
+
+
+let emailConfirmationSender = sendEmailConfirmationToken;
+let confirmEmailTokenResolver = confirmEmailWithToken;
+
+export const __setSendEmailConfirmationTokenForTests = (
+  sender: typeof sendEmailConfirmationToken
+) => {
+  emailConfirmationSender = sender;
+};
+
+export const __resetSendEmailConfirmationTokenForTests = () => {
+  emailConfirmationSender = sendEmailConfirmationToken;
+};
+
+export const __setConfirmEmailWithTokenForTests = (
+  resolver: typeof confirmEmailWithToken
+) => {
+  confirmEmailTokenResolver = resolver;
+};
+
+export const __resetConfirmEmailWithTokenForTests = () => {
+  confirmEmailTokenResolver = confirmEmailWithToken;
+};
 
 
 const parseOptionalInteger = (value: unknown): number | null => {
@@ -116,6 +145,25 @@ const addDays = (date: Date, days: number): Date => {
   return result;
 };
 
+const parseSubscriptionStatusValue = (
+  value: unknown,
+): 'pending' | 'active' | 'grace' | 'inactive' | 'overdue' | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (['pending', 'active', 'grace', 'inactive', 'overdue'].includes(normalized)) {
+    return normalized as 'pending' | 'active' | 'grace' | 'inactive' | 'overdue';
+  }
+
+  return null;
+};
+
 const calculateLegacyTrialEnd = (startDate: Date | null): Date | null => {
   if (!startDate) {
     return null;
@@ -127,6 +175,7 @@ const calculateLegacyTrialEnd = (startDate: Date | null): Date | null => {
 type SubscriptionRow = {
   empresa_plano?: unknown;
   empresa_ativo?: unknown;
+  empresa_subscription_status?: unknown;
   empresa_datacadastro?: unknown;
   empresa_trial_started_at?: unknown;
   empresa_trial_ends_at?: unknown;
@@ -138,15 +187,14 @@ type SubscriptionRow = {
   empresa_subscription_cadence?: unknown;
 };
 
-type SubscriptionStatus =
-  | 'inactive'
-  | 'pending'
-  | 'trialing'
-  | 'active'
-  | 'grace_period'
-  | 'expired';
+type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired' | 'pending';
 
-type SubscriptionBlockingReason = 'inactive' | 'trial_expired' | 'grace_period_expired' | null;
+type SubscriptionBlockingReason =
+  | 'inactive'
+  | 'trial_expired'
+  | 'grace_period_expired'
+  | 'pending'
+  | null;
 
 type SubscriptionResolution = {
   planId: number | null;
@@ -182,6 +230,8 @@ type LoginUserRow = UserRowBase & {
 const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolution => {
   const planId = parseOptionalInteger(row.empresa_plano);
   const isActive = parseBooleanFlag(row.empresa_ativo);
+  const subscriptionStatus = parseSubscriptionStatusValue(row.empresa_subscription_status);
+  const cadence = parseCadence(row.empresa_subscription_cadence);
   const startedAtDate = (() => {
     const datacadastro = parseDateValue(row.empresa_datacadastro);
     if (datacadastro) {
@@ -208,8 +258,10 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
 
     return parseDateValue(row.empresa_grace_expires_at);
   })();
+  const fallbackGracePeriodDays =
+    cadence === 'annual' ? SUBSCRIPTION_GRACE_DAYS_ANNUAL : SUBSCRIPTION_GRACE_DAYS_MONTHLY;
   const computedGracePeriodEndsAt =
-    currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, GRACE_PERIOD_DAYS) : null;
+    currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, fallbackGracePeriodDays) : null;
   const gracePeriodEndsAtDate = (() => {
     if (persistedGracePeriodEndsAt && computedGracePeriodEndsAt) {
       return persistedGracePeriodEndsAt.getTime() >= computedGracePeriodEndsAt.getTime()
@@ -230,6 +282,66 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
       gracePeriodEndsAt: null,
       isInGoodStanding: false,
       blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'pending') {
+    return {
+      planId,
+      status: 'pending',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'pending',
+    };
+  }
+
+  if (subscriptionStatus === 'inactive') {
+    return {
+      planId,
+      status: 'inactive',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'overdue') {
+    return {
+      planId,
+      status: 'expired',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'grace') {
+    return {
+      planId,
+      status: 'grace_period',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: true,
+      blockingReason: null,
     };
   }
 
@@ -319,7 +431,7 @@ const evaluateSubscriptionAccess = (
         isAllowed: false,
         statusCode: 402,
         message:
-          'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
+          `Assinatura expirada após o período de tolerância de ${GRACE_PERIOD_DAYS} dias. Regularize o pagamento para continuar.`,
       };
     case 'trial_expired':
       return {
@@ -327,6 +439,12 @@ const evaluateSubscriptionAccess = (
         statusCode: 403,
         message:
           'Período de teste encerrado. Realize uma assinatura para continuar acessando o sistema.',
+      };
+    case 'pending':
+      return {
+        isAllowed: false,
+        statusCode: 403,
+        message: 'Pagamento da assinatura pendente de confirmação. Aguarde a compensação ou tente novamente em alguns instantes.',
       };
     default:
       return {
@@ -803,9 +921,9 @@ export const register = async (req: Request, res: Response) => {
       const hashedPassword = await hashPassword(passwordValue);
 
       const userInsert = await client.query(
-        `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-      RETURNING id, nome_completo, email, perfil, empresa, status, telefone, datacriacao`,
+        `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, welcome_email_pending, datacriacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE, NOW())
+      RETURNING id, nome_completo, email, perfil, empresa, status, telefone, welcome_email_pending, datacriacao`,
         [
           nameValue,
           null,
@@ -830,6 +948,7 @@ export const register = async (req: Request, res: Response) => {
         empresa?: unknown;
         status?: unknown;
         telefone?: unknown;
+        welcome_email_pending?: unknown;
         datacriacao?: unknown;
       };
 
@@ -892,6 +1011,7 @@ export const register = async (req: Request, res: Response) => {
           empresa: createdUser?.empresa,
           status: createdUser?.status,
           telefone: createdUser?.telefone,
+          welcome_email_pending: createdUser?.welcome_email_pending,
           datacriacao: createdUser?.datacriacao,
         },
         empresa: {
@@ -931,9 +1051,27 @@ export const register = async (req: Request, res: Response) => {
   }
 
   try {
-    await sendEmailConfirmationToken(confirmationTarget);
+    await emailConfirmationSender(confirmationTarget);
+    try {
+      await pool.query('UPDATE public.usuarios SET welcome_email_pending = FALSE WHERE id = $1', [
+        confirmationTarget.id,
+      ]);
+      if (registrationResponse?.user) {
+        (registrationResponse.user as { welcome_email_pending?: boolean }).welcome_email_pending = false;
+      }
+    } catch (cleanupError) {
+      console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+    }
   } catch (error) {
     console.error('Falha ao enviar e-mail de confirmação de cadastro', error);
+
+    try {
+      await pool.query('UPDATE public.usuarios SET welcome_email_pending = TRUE WHERE id = $1', [
+        confirmationTarget.id,
+      ]);
+    } catch (cleanupError) {
+      console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+    }
 
     if (!res.headersSent) {
       res
@@ -950,6 +1088,64 @@ export const register = async (req: Request, res: Response) => {
   });
 };
 
+export const resendEmailConfirmation = async (req: Request, res: Response) => {
+  const emailValue = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+
+  if (!emailValue || !EMAIL_REGEX.test(emailValue)) {
+    res.status(400).json({ error: 'Informe um e-mail válido.' });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(emailValue);
+
+  try {
+    const userResult = await pool.query(
+      `SELECT id, nome_completo, email, email_confirmed_at
+         FROM public.usuarios
+        WHERE LOWER(email) = $1
+        LIMIT 1`,
+      [normalizedEmail],
+    );
+
+    if (userResult.rowCount === 0) {
+      res.status(404).json({ error: 'Usuário não encontrado.' });
+      return;
+    }
+
+    const userRow = userResult.rows[0] as {
+      id: number;
+      nome_completo?: unknown;
+      email?: unknown;
+      email_confirmed_at?: unknown;
+    };
+
+    const emailConfirmedAt = parseDateValue(userRow.email_confirmed_at);
+    if (emailConfirmedAt) {
+      res.status(409).json({ error: 'E-mail já confirmado.' });
+      return;
+    }
+
+    const rawUserName =
+      typeof userRow.nome_completo === 'string' ? userRow.nome_completo.trim() : '';
+    const userName = rawUserName.length > 0 ? rawUserName : 'Usuário';
+    const userEmail =
+      typeof userRow.email === 'string' && userRow.email.trim().length > 0
+        ? userRow.email.trim()
+        : normalizedEmail;
+
+    await emailConfirmationSender({
+      id: userRow.id,
+      nome_completo: userName,
+      email: userEmail,
+    });
+
+    res.json({ message: 'Um novo e-mail de confirmação foi enviado.' });
+  } catch (error) {
+    console.error('Erro ao reenviar e-mail de confirmação', error);
+    res.status(500).json({ error: 'Não foi possível reenviar o e-mail de confirmação.' });
+  }
+};
+
 export const confirmEmail = async (req: Request, res: Response) => {
   const tokenValue = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
 
@@ -959,25 +1155,31 @@ export const confirmEmail = async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await confirmEmailWithToken(tokenValue);
+    const result = await confirmEmailTokenResolver(tokenValue);
 
     res.json({
       message: 'E-mail confirmado com sucesso.',
       confirmedAt: result.confirmedAt.toISOString(),
     });
   } catch (error) {
-    if (error instanceof EmailConfirmationTokenError) {
-      if (error.code === 'TOKEN_INVALID') {
+    const tokenError =
+      error instanceof EmailConfirmationTokenError ||
+      (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'EmailConfirmationTokenError')
+        ? (error as EmailConfirmationTokenError & { code?: string })
+        : null;
+
+    if (tokenError) {
+      if (tokenError.code === 'TOKEN_INVALID') {
         res.status(400).json({ error: 'Token de confirmação inválido.' });
         return;
       }
 
-      if (error.code === 'TOKEN_EXPIRED') {
+      if (tokenError.code === 'TOKEN_EXPIRED') {
         res.status(400).json({ error: 'Token de confirmação expirado. Solicite um novo link.' });
         return;
       }
 
-      if (error.code === 'TOKEN_ALREADY_USED') {
+      if (tokenError.code === 'TOKEN_ALREADY_USED') {
         res.status(409).json({ error: 'Token de confirmação já utilizado.' });
         return;
       }
@@ -989,21 +1191,21 @@ export const confirmEmail = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { email, senha } = req.body as { email?: unknown; senha?: unknown };
+  const { supabaseUid, email } = req.body as { supabaseUid?: unknown; email?: unknown };
 
-  if (typeof email !== 'string' || typeof senha !== 'string') {
-    res.status(400).json({ error: 'Credenciais inválidas.' });
+  const supabaseUserId = typeof supabaseUid === 'string' ? supabaseUid.trim() : '';
+  if (!supabaseUserId) {
+    res.status(400).json({ error: 'Identificador de usuário inválido.' });
     return;
   }
 
-  try {
-    const normalizedEmail = normalizeEmail(email);
+  const providedEmail = typeof email === 'string' ? email.trim() : '';
 
+  try {
     const userResult = await pool.query(
       `SELECT u.id,
               u.nome_completo,
               u.email,
-              u.senha,
               u.must_change_password,
               u.email_confirmed_at,
               u.status,
@@ -1025,18 +1227,19 @@ export const login = async (req: Request, res: Response) => {
               to_jsonb(emp) ->> 'subscription_trial_ends_at' AS empresa_subscription_trial_ends_at,
               to_jsonb(emp) ->> 'subscription_current_period_ends_at' AS empresa_subscription_current_period_ends_at,
               to_jsonb(emp) ->> 'subscription_grace_period_ends_at' AS empresa_subscription_grace_period_ends_at,
-              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence
+              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence,
+              to_jsonb(emp) ->> 'subscription_status' AS empresa_subscription_status
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
          LEFT JOIN public.perfis per ON per.id = u.perfil
-        WHERE LOWER(u.email) = $1
+        WHERE u.supabase_user_id = $1
         LIMIT 1`,
-      [normalizedEmail]
+      [supabaseUserId]
     );
 
     if (userResult.rowCount === 0) {
-      res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+      res.status(401).json({ error: 'Usuário não encontrado.' });
       return;
     }
 
@@ -1044,7 +1247,6 @@ export const login = async (req: Request, res: Response) => {
       id: number;
       nome_completo: string;
       email: string;
-      senha: string | null;
       email_confirmed_at?: unknown;
       status: unknown;
       perfil: number | string | null;
@@ -1067,7 +1269,17 @@ export const login = async (req: Request, res: Response) => {
       empresa_subscription_current_period_ends_at?: unknown;
       empresa_subscription_grace_period_ends_at?: unknown;
       empresa_subscription_cadence?: unknown;
+      empresa_subscription_status?: unknown;
     };
+
+    if (providedEmail) {
+      const normalizedProvidedEmail = normalizeEmail(providedEmail);
+      const normalizedUserEmail = normalizeEmail(user.email);
+      if (normalizedProvidedEmail !== normalizedUserEmail) {
+        res.status(401).json({ error: 'Credenciais inválidas.' });
+        return;
+      }
+    }
 
     const isUserActive = parseBooleanFlag(user.status);
     if (isUserActive === false) {
@@ -1079,26 +1291,6 @@ export const login = async (req: Request, res: Response) => {
     if (!emailConfirmedAt) {
       res.status(403).json({ error: 'Confirme seu e-mail antes de acessar.' });
       return;
-    }
-
-    const passwordCheck = await verifyPassword(senha, user.senha);
-
-    if (!passwordCheck.isValid) {
-      res.status(401).json({ error: 'E-mail ou senha incorretos.' });
-      return;
-    }
-
-    if (passwordCheck.migratedHash) {
-      try {
-        await pool.query(
-          `UPDATE public.usuarios
-              SET senha = $1
-            WHERE id = $2`,
-          [passwordCheck.migratedHash, user.id]
-        );
-      } catch (migrationError) {
-        console.error('Falha ao atualizar hash de senha legado durante login', migrationError);
-      }
     }
 
     const mustChangePassword =
@@ -1125,6 +1317,7 @@ export const login = async (req: Request, res: Response) => {
         user.empresa_subscription_grace_period_ends_at ??
         user.empresa_grace_expires_at,
       empresa_subscription_cadence: user.empresa_subscription_cadence,
+      empresa_subscription_status: user.empresa_subscription_status,
     };
 
     const subscriptionResolution =
@@ -1149,16 +1342,6 @@ export const login = async (req: Request, res: Response) => {
       console.error('Falha ao atualizar ultimo_login do usuário', updateLastLoginError);
     }
 
-    const token = signToken(
-      {
-        sub: user.id,
-        email: user.email,
-        name: user.nome_completo,
-      },
-      authConfig.secret,
-      authConfig.expirationSeconds
-    );
-
     const modulos = await fetchPerfilModules(user.perfil);
 
     const subscriptionDetails =
@@ -1166,6 +1349,7 @@ export const login = async (req: Request, res: Response) => {
         ? resolveSubscriptionPayloadFromRow({
             empresa_plano: subscriptionRow.empresa_plano,
             empresa_ativo: subscriptionRow.empresa_ativo,
+            empresa_subscription_status: subscriptionRow.empresa_subscription_status,
             trial_started_at:
               subscriptionRow.empresa_trial_started_at ?? subscriptionRow.empresa_datacadastro,
             trial_ends_at: subscriptionRow.empresa_trial_ends_at,
@@ -1204,10 +1388,7 @@ export const login = async (req: Request, res: Response) => {
           }
         : null;
 
-
     res.json({
-      token,
-      expiresIn: authConfig.expirationSeconds,
       user: {
         id: user.id,
         nome_completo: user.nome_completo,
@@ -1425,32 +1606,8 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
-export const refreshToken = (req: Request, res: Response) => {
-  if (!req.auth) {
-    res.status(401).json({ error: 'Token inválido.' });
-    return;
-  }
-
-  try {
-    const payload = (req.auth.payload ?? {}) as Record<string, unknown>;
-    const refreshedToken = signToken(
-      {
-        sub: req.auth.userId,
-        email: typeof payload.email === 'string' ? payload.email : undefined,
-        name: typeof payload.name === 'string' ? payload.name : undefined,
-      },
-      authConfig.secret,
-      authConfig.expirationSeconds
-    );
-
-    res.json({
-      token: refreshedToken,
-      expiresIn: authConfig.expirationSeconds,
-    });
-  } catch (error) {
-    console.error('Erro ao renovar token de autenticação', error);
-    res.status(500).json({ error: 'Não foi possível renovar o token de acesso.' });
-  }
+export const refreshToken = (_req: Request, res: Response) => {
+  res.status(410).json({ error: 'Fluxo de renovação local desativado. Utilize o token do Supabase.' });
 };
 
 export const getCurrentUser = async (req: Request, res: Response) => {
@@ -1482,7 +1639,8 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               emp.subscription_cadence AS empresa_subscription_cadence,
               emp.datacadastro AS empresa_datacadastro,
               COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
-              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
+              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at,
+              emp.subscription_status AS empresa_subscription_status
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -1517,6 +1675,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         ? resolveSubscriptionPayloadFromRow({
             empresa_plano: user.empresa_plano,
             empresa_ativo: user.empresa_ativo,
+            empresa_subscription_status: user.empresa_subscription_status,
             trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
             trial_ends_at: user.empresa_trial_ends_at,
             current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,

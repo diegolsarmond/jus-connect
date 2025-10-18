@@ -1,5 +1,7 @@
+import { createHash, createHmac, randomBytes } from 'crypto';
 import { QueryResultRow } from 'pg';
 import pool from './db';
+import { sanitizeDigits } from '../utils/sanitizeDigits';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -25,6 +27,7 @@ type Queryable = {
 interface UserProfileQueryRow extends QueryResultRow {
   user_id: number;
   nome_completo: string | null;
+  cpf: string | null;
   email: string | null;
   telefone: string | null;
   ultimo_login: string | Date | null;
@@ -50,6 +53,9 @@ interface UserProfileQueryRow extends QueryResultRow {
   security_two_factor: boolean | null;
   security_login_alerts: boolean | null;
   security_device_approval: boolean | null;
+  security_two_factor_secret: string | null;
+  security_two_factor_activated_at: string | Date | null;
+  security_two_factor_backup_codes: string[] | null;
   avatar_url: string | null;
   member_since: string | Date | null;
 }
@@ -57,6 +63,7 @@ interface UserProfileQueryRow extends QueryResultRow {
 export interface UserProfile {
   id: number;
   name: string;
+  cpf: string | null;
   title: string | null;
   email: string;
   phone: string | null;
@@ -85,6 +92,7 @@ export interface UserProfile {
     twoFactor: boolean;
     loginAlerts: boolean;
     deviceApproval: boolean;
+    twoFactorActivatedAt: string | null;
   };
   lastLogin: string | null;
   memberSince: string | null;
@@ -108,12 +116,15 @@ export interface UserProfileSession {
   location: string | null;
   lastActivity: string;
   isActive: boolean;
+  isApproved: boolean;
+  approvedAt: string | null;
   createdAt: string;
   revokedAt: string | null;
 }
 
 export interface UpdateProfileInput {
   name?: string | null;
+  cpf?: string | null;
   title?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -178,7 +189,27 @@ interface AuditLogPayload {
   description: string;
 }
 
+export interface TwoFactorInitiationResult {
+  secret: string;
+  otpauthUrl: string;
+  qrCode: string;
+}
+
+export interface TwoFactorConfirmationResult {
+  backupCodes: string[];
+}
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const DEFAULT_TOTP_STEP_SECONDS = 30;
+const DEFAULT_TOTP_WINDOW = 1;
+const TOTP_DIGITS = 6;
+const BACKUP_CODES_COUNT = 10;
+const BACKUP_CODE_BYTES = 5;
+const DEFAULT_TOTP_ISSUER = 'JusConnect';
+const QR_CODE_ENDPOINT = 'https://quickchart.io/qr';
+const QR_CODE_SIZE = 240;
 
 const normalizeUserId = (value: number): number => {
   if (!Number.isInteger(value) || value <= 0) {
@@ -248,6 +279,36 @@ const normalizeOptionalEmail = (value: unknown): string | null | undefined => {
   }
 
   return normalized.toLowerCase();
+};
+
+const normalizeOptionalCpf = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new ValidationError('Informe um CPF válido.');
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const digits = sanitizeDigits(trimmed);
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length !== 11) {
+    throw new ValidationError('Informe um CPF válido.');
+  }
+
+  return digits;
 };
 
 const normalizeOptionalPhone = (value: unknown): string | null | undefined => {
@@ -453,6 +514,8 @@ const mapSessionRow = (row: QueryResultRow): UserProfileSession => ({
   location: typeof row.location === 'string' ? row.location : null,
   lastActivity: toIsoString(row.last_activity) ?? new Date().toISOString(),
   isActive: Boolean(row.is_active),
+  isApproved: Boolean(row.is_approved),
+  approvedAt: toIsoString(row.approved_at),
   createdAt: toIsoString(row.created_at) ?? new Date().toISOString(),
   revokedAt: toIsoString(row.revoked_at),
 });
@@ -465,6 +528,136 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
   return a.every((value, index) => value === b[index]);
 };
 
+const generateBase32Secret = (length = 32): string => {
+  const bytes = randomBytes(length);
+  let secret = '';
+
+  for (const byte of bytes) {
+    secret += BASE32_ALPHABET.charAt(byte & 31);
+  }
+
+  return secret;
+};
+
+const base32ToBuffer = (secret: string): Buffer => {
+  const sanitized = secret.replace(/[^A-Z2-7]/gi, '').toUpperCase();
+
+  if (!sanitized) {
+    return Buffer.alloc(0);
+  }
+
+  let bits = '';
+  for (const char of sanitized) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index === -1) {
+      continue;
+    }
+    bits += index.toString(2).padStart(5, '0');
+  }
+
+  const byteCount = Math.floor(bits.length / 8);
+  const buffer = Buffer.alloc(byteCount);
+
+  for (let i = 0; i < byteCount; i += 1) {
+    buffer[i] = Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+
+  return buffer;
+};
+
+const buildCounterBuffer = (timestamp: number): Buffer => {
+  const counter = Math.floor(timestamp / 1000 / DEFAULT_TOTP_STEP_SECONDS);
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64BE(BigInt(counter));
+  return buffer;
+};
+
+const generateTotpToken = (secret: string, timestamp: number): string | null => {
+  const key = base32ToBuffer(secret);
+
+  if (key.length === 0) {
+    return null;
+  }
+
+  const digest = createHmac('sha1', key).update(buildCounterBuffer(timestamp)).digest();
+  const offset = digest[digest.length - 1] & 0xf;
+
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+
+  return (binary % 10 ** TOTP_DIGITS).toString().padStart(TOTP_DIGITS, '0');
+};
+
+const verifyTotpToken = (secret: string, token: string): boolean => {
+  const normalized = token.replace(/\s+/g, '');
+
+  if (!/^\d{6}$/.test(normalized)) {
+    return false;
+  }
+
+  const now = Date.now();
+
+  for (let offset = -DEFAULT_TOTP_WINDOW; offset <= DEFAULT_TOTP_WINDOW; offset += 1) {
+    const timestamp = now + offset * DEFAULT_TOTP_STEP_SECONDS * 1000;
+    const expected = generateTotpToken(secret, timestamp);
+
+    if (expected && expected === normalized) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const normalizeBackupCode = (value: string): string =>
+  value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+
+const generateBackupCodes = (): string[] => {
+  const codes = new Set<string>();
+
+  while (codes.size < BACKUP_CODES_COUNT) {
+    codes.add(randomBytes(BACKUP_CODE_BYTES).toString('hex').toUpperCase());
+  }
+
+  return Array.from(codes);
+};
+
+const hashBackupCode = (code: string): string => createHash('sha256').update(code).digest('hex');
+
+const consumeBackupCode = (code: string, hashedCodes: string[]): string[] | null => {
+  if (!Array.isArray(hashedCodes) || hashedCodes.length === 0) {
+    return null;
+  }
+
+  const normalized = normalizeBackupCode(code);
+  if (!normalized) {
+    return null;
+  }
+
+  const hashed = hashBackupCode(normalized);
+  const index = hashedCodes.findIndex((value) => value === hashed);
+
+  if (index === -1) {
+    return null;
+  }
+
+  const remaining = hashedCodes.slice();
+  remaining.splice(index, 1);
+  return remaining;
+};
+
+const buildOtpAuthUrl = (label: string, secret: string, issuer: string): string => {
+  const encodedLabel = encodeURIComponent(label);
+  const encodedIssuer = encodeURIComponent(issuer);
+  return `otpauth://totp/${encodedLabel}?secret=${secret}&issuer=${encodedIssuer}`;
+};
+
+const buildQrCodeUrl = (data: string): string =>
+  `${QR_CODE_ENDPOINT}?text=${encodeURIComponent(data)}&size=${QR_CODE_SIZE}&margin=2`;
+
 class UserProfileService {
   constructor(private readonly db: Queryable = pool) {}
 
@@ -476,6 +669,7 @@ class UserProfileService {
         SELECT
           u.id AS user_id,
           u.nome_completo,
+          u.cpf,
           u.email,
           u.telefone,
           u.ultimo_login,
@@ -501,6 +695,9 @@ class UserProfileService {
           p.security_two_factor,
           p.security_login_alerts,
           p.security_device_approval,
+          p.security_two_factor_secret,
+          p.security_two_factor_activated_at,
+          p.security_two_factor_backup_codes,
           p.avatar_url,
           p.member_since
         FROM public.usuarios u
@@ -531,11 +728,13 @@ class UserProfileService {
       twoFactor: row.security_two_factor ?? false,
       loginAlerts: row.security_login_alerts ?? false,
       deviceApproval: row.security_device_approval ?? false,
+      twoFactorActivatedAt: toIsoString(row.security_two_factor_activated_at),
     };
 
     return {
       id: row.user_id,
       name: row.nome_completo ?? '',
+      cpf: row.cpf ?? null,
       title: row.title ?? null,
       email: row.email ?? '',
       phone: row.telefone ?? null,
@@ -617,6 +816,11 @@ class UserProfileService {
     const phoneValue = normalizeOptionalPhone(input.phone);
     if (phoneValue !== undefined) {
       addUsuarioUpdate('telefone', phoneValue);
+    }
+
+    const cpfValue = normalizeOptionalCpf(input.cpf);
+    if (cpfValue !== undefined) {
+      addUsuarioUpdate('cpf', cpfValue);
     }
 
     const specialtiesValue = normalizeSpecialties(input.specialties);
@@ -869,6 +1073,10 @@ class UserProfileService {
       changedFieldLabels.add('Nome completo');
     }
 
+    if (cpfValue !== undefined && cpfValue !== currentProfile.cpf) {
+      changedFieldLabels.add('CPF');
+    }
+
     if (emailValue !== undefined && emailValue !== currentProfile.email) {
       changedFieldLabels.add('E-mail');
       auditEntries.push({ action: 'EMAIL_CHANGE', description: 'E-mail atualizado.' });
@@ -1089,11 +1297,164 @@ class UserProfileService {
     return result.rows.map(mapAuditLogRow);
   }
 
+  public async initiateTwoFactor(
+    userId: number,
+    performer?: { id?: number; name?: string }
+  ): Promise<TwoFactorInitiationResult> {
+    const normalizedId = normalizeUserId(userId);
+    const row = await this.fetchUserProfileRow(normalizedId);
+
+    if (!row) {
+      throw new NotFoundError('Usuário não encontrado.');
+    }
+
+    const secret = generateBase32Secret();
+    const issuer = DEFAULT_TOTP_ISSUER;
+    const identity =
+      typeof row.email === 'string' && row.email.trim()
+        ? row.email.trim()
+        : `usuario-${normalizedId}`;
+    const label = `${issuer}:${identity}`;
+    const otpauthUrl = buildOtpAuthUrl(label, secret, issuer);
+    const qrCode = buildQrCodeUrl(otpauthUrl);
+
+    await this.db.query(
+      `
+        INSERT INTO public.user_profiles (
+          user_id,
+          security_two_factor_secret,
+          security_two_factor_backup_codes,
+          security_two_factor,
+          security_two_factor_activated_at
+        )
+        VALUES ($1, $2, ARRAY[]::text[], FALSE, NULL)
+        ON CONFLICT (user_id) DO UPDATE SET
+          security_two_factor_secret = EXCLUDED.security_two_factor_secret,
+          security_two_factor_backup_codes = ARRAY[]::text[],
+          security_two_factor = FALSE,
+          security_two_factor_activated_at = NULL,
+          updated_at = NOW()
+      `,
+      [normalizedId, secret]
+    );
+
+    await this.createAuditLog(
+      normalizedId,
+      'TWO_FACTOR_INIT',
+      'Configuração de autenticação de dois fatores iniciada.',
+      performer
+    );
+
+    return { secret, otpauthUrl, qrCode };
+  }
+
+  public async confirmTwoFactor(
+    userId: number,
+    code: string,
+    performer?: { id?: number; name?: string }
+  ): Promise<TwoFactorConfirmationResult> {
+    const normalizedId = normalizeUserId(userId);
+    const row = await this.fetchUserProfileRow(normalizedId);
+
+    if (!row || !row.security_two_factor_secret) {
+      throw new ValidationError('Inicie a configuração do 2FA antes de confirmar.');
+    }
+
+    if (!verifyTotpToken(row.security_two_factor_secret, code)) {
+      throw new ValidationError('Código de verificação inválido.');
+    }
+
+    const backupCodes = generateBackupCodes();
+    const hashedCodes = backupCodes.map((value) => hashBackupCode(value));
+
+    await this.db.query(
+      `
+        UPDATE public.user_profiles
+        SET security_two_factor = TRUE,
+            security_two_factor_activated_at = NOW(),
+            security_two_factor_backup_codes = $2,
+            updated_at = NOW()
+        WHERE user_id = $1
+      `,
+      [normalizedId, hashedCodes]
+    );
+
+    await this.createAuditLog(
+      normalizedId,
+      'TWO_FACTOR_ENABLED',
+      'Autenticação de dois fatores ativada.',
+      performer
+    );
+
+    return { backupCodes };
+  }
+
+  public async disableTwoFactor(
+    userId: number,
+    code: string,
+    performer?: { id?: number; name?: string }
+  ): Promise<void> {
+    const normalizedId = normalizeUserId(userId);
+    const row = await this.fetchUserProfileRow(normalizedId);
+
+    if (!row || !row.security_two_factor_secret) {
+      throw new ValidationError('Autenticação de dois fatores não está configurada.');
+    }
+
+    if (!row.security_two_factor) {
+      throw new ValidationError('Autenticação de dois fatores não está ativa.');
+    }
+
+    const hashedCodes = Array.isArray(row.security_two_factor_backup_codes)
+      ? row.security_two_factor_backup_codes
+      : [];
+
+    let verified = verifyTotpToken(row.security_two_factor_secret, code);
+
+    if (!verified) {
+      verified = consumeBackupCode(code, hashedCodes) !== null;
+    }
+
+    if (!verified) {
+      throw new ValidationError('Código de verificação inválido.');
+    }
+
+    await this.db.query(
+      `
+        UPDATE public.user_profiles
+        SET security_two_factor = FALSE,
+            security_two_factor_secret = NULL,
+            security_two_factor_backup_codes = ARRAY[]::text[],
+            security_two_factor_activated_at = NULL,
+            updated_at = NOW()
+        WHERE user_id = $1
+      `,
+      [normalizedId]
+    );
+
+    await this.createAuditLog(
+      normalizedId,
+      'TWO_FACTOR_DISABLED',
+      'Autenticação de dois fatores desativada.',
+      performer
+    );
+  }
+
   public async listSessions(userId: number): Promise<UserProfileSession[]> {
     const normalizedId = normalizeUserId(userId);
     const result = await this.db.query(
       `
-        SELECT id, user_id, device, location, last_activity, is_active, created_at, revoked_at
+        SELECT
+          id,
+          user_id,
+          device,
+          location,
+          last_activity,
+          is_active,
+          is_approved,
+          approved_at,
+          created_at,
+          revoked_at
         FROM public.user_profile_sessions
         WHERE user_id = $1
         ORDER BY is_active DESC, last_activity DESC
@@ -1102,6 +1463,102 @@ class UserProfileService {
     );
 
     return result.rows.map(mapSessionRow);
+  }
+
+  public async approveSession(
+    userId: number,
+    sessionId: number,
+    performer?: { id?: number; name?: string }
+  ): Promise<UserProfileSession | null> {
+    const normalizedId = normalizeUserId(userId);
+
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      throw new ValidationError('Sessão inválida.');
+    }
+
+    const result = await this.db.query(
+      `
+        UPDATE public.user_profile_sessions
+        SET is_approved = TRUE,
+            approved_at = NOW()
+        WHERE user_id = $1 AND id = $2 AND is_approved = FALSE
+        RETURNING
+          id,
+          user_id,
+          device,
+          location,
+          last_activity,
+          is_active,
+          is_approved,
+          approved_at,
+          created_at,
+          revoked_at
+      `,
+      [normalizedId, sessionId]
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const session = mapSessionRow(result.rows[0]);
+
+    await this.createAuditLog(
+      normalizedId,
+      'DEVICE_APPROVED',
+      `Dispositivo aprovado: ${session.device}.`,
+      performer
+    );
+
+    return session;
+  }
+
+  public async revokeSessionApproval(
+    userId: number,
+    sessionId: number,
+    performer?: { id?: number; name?: string }
+  ): Promise<UserProfileSession | null> {
+    const normalizedId = normalizeUserId(userId);
+
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      throw new ValidationError('Sessão inválida.');
+    }
+
+    const result = await this.db.query(
+      `
+        UPDATE public.user_profile_sessions
+        SET is_approved = FALSE,
+            approved_at = NULL
+        WHERE user_id = $1 AND id = $2 AND is_approved = TRUE
+        RETURNING
+          id,
+          user_id,
+          device,
+          location,
+          last_activity,
+          is_active,
+          is_approved,
+          approved_at,
+          created_at,
+          revoked_at
+      `,
+      [normalizedId, sessionId]
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const session = mapSessionRow(result.rows[0]);
+
+    await this.createAuditLog(
+      normalizedId,
+      'DEVICE_REVOKED',
+      `Aprovação removida do dispositivo: ${session.device}.`,
+      performer
+    );
+
+    return session;
   }
 
   public async revokeSession(
@@ -1122,7 +1579,17 @@ class UserProfileService {
             revoked_at = NOW(),
             last_activity = NOW()
         WHERE user_id = $1 AND id = $2 AND is_active = TRUE
-        RETURNING id, user_id, device, location, last_activity, is_active, created_at, revoked_at
+        RETURNING
+          id,
+          user_id,
+          device,
+          location,
+          last_activity,
+          is_active,
+          is_approved,
+          approved_at,
+          created_at,
+          revoked_at
       `,
       [normalizedId, sessionId]
     );

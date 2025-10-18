@@ -13,6 +13,10 @@ psql -f sql/intimacoes.sql
 npm run dev
 ```
 
+> 💡 Ao utilizar o Supabase, copie a string de conexão fornecida no painel e
+> exporte-a como `DATABASE_URL` com `sslmode=require` antes de executar `npm run
+> dev`. Serviços gerenciados exigem TLS habilitado; não remova esse parâmetro.
+
 ### Segredo do token de autenticação
 
 O backend **não inicia** sem um segredo explícito para assinar os tokens JWT. Defina a variável
@@ -20,6 +24,13 @@ O backend **não inicia** sem um segredo explícito para assinar os tokens JWT. 
 antes de executar `npm run dev` ou publicar o serviço. Em ambientes de contêiner/Docker, exporte a
 variável na orquestração (Compose, Kubernetes, etc.) para evitar subir instâncias com segredos
 padrão.
+
+### Limite padrão de payloads JSON
+
+As rotas autenticadas agora utilizam limite padrão de 1 MB para requisições JSON e `application/x-www-form-urlencoded`.
+Os endpoints `POST /api/support/:id/messages` e `POST /api/clientes/:clienteId/documentos` continuam aceitando
+cargas de até 50 MB por receberem anexos em Base64. Ajuste integrações que enviam arquivos em JSON para utilizar
+os caminhos dedicados ou o fluxo de upload multipart (`POST /api/uploads`).
 
 ### Integração com notificações do PJE
 
@@ -135,7 +146,7 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 | `SMTP_SECURE`               | Informe `true` quando o servidor exige TLS direto na conexão (porta 465). Para STARTTLS utilize `false`. |
 | `SMTP_REJECT_UNAUTHORIZED`  | Mantenha `true` para validar o certificado. Ajuste para `false` apenas em ambientes de teste com certificados autoassinados. |
 | `SMTP_USER` e `SMTP_PASSWORD` | Credenciais válidas no servidor SMTP. |
-| `SMTP_FROM`                 | Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
+| `SMTP_FROM`                 | **Obrigatório.** Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
 | `SMTP_FROM_NAME`            | Nome exibido no remetente dos e-mails (opcional). |
 
 > 💡 Defina as mesmas chaves no ambiente de build do frontend caso ele consuma endpoints intermediários (`VITE_API_URL`).
@@ -183,14 +194,17 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 
 ```bash
 cd backend
-npm run build
-# Defina DATABASE_URL ou certifique-se de que appsettings.json contenha a conexão
-DATABASE_URL="postgres://user:pass@host:port/db" npm start
+# Defina DATABASE_URL com a URL do Supabase (sslmode=require) antes do build
+DATABASE_URL="postgres://user:pass@host:port/db?sslmode=require" npm run build
+# Utilize a mesma URL ao iniciar o servidor
+DATABASE_URL="postgres://user:pass@host:port/db?sslmode=require" npm start
 ```
 
 Se `DATABASE_URL` não estiver definido, o servidor buscará a cadeia de conexão em
 `appsettings.json`. Esse arquivo é opcional, mas se ambos estiverem ausentes o
-backend encerrará com um erro informativo.
+backend encerrará com um erro informativo. Em ambientes como Supabase, mantenha
+sempre o TLS habilitado (`sslmode=require`) para evitar falhas durante o build e
+em produção.
 
 ### Frontend
 

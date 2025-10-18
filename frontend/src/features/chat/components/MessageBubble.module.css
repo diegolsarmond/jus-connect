@@ -53,6 +53,12 @@
   opacity: 0.8;
 }
 
+.duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
 .attachment {
   width: clamp(180px, 40vw, 320px);
   border-radius: 0.85rem;
@@ -68,6 +74,13 @@
 .audioPlayer {
   width: clamp(200px, 44vw, 360px);
   max-width: 100%;
+}
+
+.audioDownload {
+  font-size: 0.78rem;
+  text-decoration: underline;
+  color: inherit;
+  width: fit-content;
 }
 
 .attachmentCaption {

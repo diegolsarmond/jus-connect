@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,32 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getApiBaseUrl } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+
+const forbiddenMessage = "Usuário autenticado não possui empresa vinculada.";
+
+async function getForbiddenMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data === "string") {
+      const trimmed = data.trim();
+      return trimmed || forbiddenMessage;
+    }
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const keys = ["message", "mensagem", "error", "detail"];
+      for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+  } catch {
+    return forbiddenMessage;
+  }
+  return forbiddenMessage;
+}
 
 interface Etiqueta {
   id: number;
@@ -38,6 +64,22 @@ export default function Etiquetas() {
   const [editing, setEditing] = useState<Etiqueta | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { toast } = useToast();
+  const forbiddenToastShown = useRef(false);
+
+  const handleForbidden = async (response: Response, clear: () => void) => {
+    if (response.status !== 403) {
+      return false;
+    }
+    clear();
+    const description = await getForbiddenMessage(response);
+    setErrorMsg(description);
+    if (!forbiddenToastShown.current) {
+      toast({ title: "Acesso negado", description, variant: "destructive" });
+      forbiddenToastShown.current = true;
+    }
+    return true;
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,6 +89,10 @@ export default function Etiquetas() {
         const res = await fetch(`${apiUrl}/api/etiquetas`, {
           headers: { Accept: "application/json" },
         });
+        if (await handleForbidden(res, () => setItems([]))) {
+          setLoading(false);
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -99,6 +145,9 @@ export default function Etiquetas() {
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho`, {
           headers: { Accept: "application/json" },
         });
+        if (await handleForbidden(res, () => setFluxos([]))) {
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)

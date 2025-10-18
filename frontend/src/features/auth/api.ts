@@ -1,4 +1,6 @@
+import { supabase } from "@/integrations/supabase/client";
 import { getApiUrl } from "@/lib/api";
+import type { SupabaseSession, SupabaseUser } from "@supabase/supabase-js";
 import type {
   AuthSubscription,
   AuthUser,
@@ -71,6 +73,15 @@ const parseBooleanFlag = (value: unknown): boolean | null => {
     if (["0", "false", "f", "no", "n", "nao", "não", "off", "inativo", "inativa"].includes(normalized)) {
       return false;
     }
+  }
+
+  return null;
+};
+
+const parseStringField = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   return null;
@@ -187,6 +198,69 @@ const parseViewAllConversations = (record: Record<string, unknown>): boolean =>
       record.perfil_ver_todas_conversas,
   ) ?? true;
 
+const resolveSupabaseMetadata = (
+  user: SupabaseUser,
+  fallbackEmail: string,
+): AuthUser => {
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const record: Record<string, unknown> = { ...metadata };
+
+  const email = parseStringField(record.email) ?? parseStringField(user.email) ?? fallbackEmail;
+  const nomeCompleto =
+    parseStringField(record.nome_completo ?? record.nomeCompleto ?? record.full_name ?? record.name) ??
+    email ??
+    fallbackEmail;
+
+  const id =
+    parseInteger(
+      record.id ?? record.userId ?? record.user_id ?? record.profileId ?? record.profile_id ?? record.usuario_id,
+    ) ?? null;
+
+  if (id === null) {
+    throw new Error("Não foi possível determinar o identificador do usuário autenticado.");
+  }
+
+  const perfil = parseInteger(record.perfil ?? record.profile ?? record.perfil_id ?? record.profileId) ?? null;
+  const status = parseBooleanFlag(record.status ?? record.ativo ?? record.active);
+  const empresaId =
+    parseInteger(record.empresa_id ?? record.empresaId ?? record.companyId ?? record.empresa ?? record.company_id) ?? null;
+  const empresaNome =
+    parseStringField(record.empresa_nome ?? record.empresaNome ?? record.companyName ?? record.empresaNomeCompleto) ?? null;
+  const empresaResponsavelId =
+    parseInteger(
+      record.empresa_responsavel_id ??
+        record.empresaResponsavelId ??
+        record.companyManagerId ??
+        record.companyResponsibleId ??
+        record.responsavel_empresa ??
+        record.company_responsavel,
+    ) ?? null;
+  const setorId = parseInteger(record.setor_id ?? record.setorId ?? record.departmentId ?? record.departamento_id) ?? null;
+  const setorNome =
+    parseStringField(record.setor_nome ?? record.setorNome ?? record.departmentName ?? record.departamento_nome) ?? null;
+  const modulos = parseModules(record.modulos);
+  const subscription = parseSubscription(record.subscription);
+  const mustChangePassword = resolveMustChangePassword(record);
+  const viewAllConversations = parseViewAllConversations(record);
+
+  return {
+    id,
+    nome_completo: nomeCompleto,
+    email: email ?? fallbackEmail,
+    perfil,
+    status,
+    modulos,
+    empresa_id: empresaId,
+    empresa_nome: empresaNome,
+    empresa_responsavel_id: empresaResponsavelId,
+    setor_id: setorId,
+    setor_nome: setorNome,
+    subscription,
+    mustChangePassword,
+    viewAllConversations,
+  } satisfies AuthUser;
+};
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -215,36 +289,29 @@ const buildApiError = async (response: Response) =>
 export const loginRequest = async (
   credentials: LoginCredentials,
 ): Promise<LoginResponse> => {
-  const response = await fetch(getApiUrl("auth/login"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(credentials),
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: credentials.email,
+    password: credentials.senha,
   });
 
-  if (!response.ok) {
-    throw await buildApiError(response);
+  if (error) {
+    throw new ApiError(error.message ?? "Falha ao autenticar.", error.status ?? 401);
   }
 
-  const data = (await response.json()) as LoginResponse;
-  if (!data?.token || !data?.user) {
+  const session = data.session as SupabaseSession | null;
+  const user = data.user as SupabaseUser | null;
+
+  if (!session?.access_token || !user) {
     throw new Error("Resposta de autenticação inválida.");
   }
 
-  const userRecord = data.user as AuthUser & Record<string, unknown>;
+  const authUser = resolveSupabaseMetadata(user, credentials.email);
 
   return {
-    token: data.token,
-    expiresIn: data.expiresIn,
-    user: {
-      ...data.user,
-      modulos: parseModules(userRecord.modulos),
-      subscription: parseSubscription(userRecord.subscription),
-      mustChangePassword: resolveMustChangePassword(userRecord),
-      viewAllConversations: parseViewAllConversations(userRecord),
-    },
+    token: session.access_token,
+    expiresIn: session.expires_in ?? undefined,
+    user: authUser,
+    session,
   };
 };
 
@@ -360,6 +427,32 @@ export const requestPasswordReset = async (
         ? data.message
         : "Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.",
   };
+};
+
+export const resendEmailConfirmationRequest = async (email: string): Promise<string> => {
+  const response = await fetch(getApiUrl("auth/resend-email-confirmation"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  try {
+    const data = (await response.json()) as { message?: unknown };
+    if (typeof data?.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+  } catch (error) {
+    console.warn("Failed to parse resend confirmation response", error);
+  }
+
+  return "Um novo e-mail de confirmação foi enviado.";
 };
 
 export const confirmEmailRequest = async (

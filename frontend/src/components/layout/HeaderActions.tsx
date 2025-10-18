@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { hasAdminAccess } from "@/features/auth/adminAccess";
 import { usePlan } from "@/features/plans/PlanProvider";
 import { getPlanDisplayName, getPlanVisualMeta } from "@/features/plans/planVisuals";
 import { routes } from "@/config/routes";
@@ -141,6 +142,8 @@ export function HeaderActions() {
 
   const profileToggleLabel = isOnAdminArea ? "Alternar para CRM" : "Alternar para admin";
 
+  const canToggleAdmin = useMemo(() => hasAdminAccess(user), [user]);
+
   const handleProfileToggle = useCallback(() => {
     if (isOnAdminArea) {
       navigate(routes.dashboard, { replace: true });
@@ -224,7 +227,7 @@ export function HeaderActions() {
             <User className="mr-2 h-4 w-4" />
             Perfil
           </DropdownMenuItem>
-          {user?.id === 3 && (
+          {canToggleAdmin && (
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
