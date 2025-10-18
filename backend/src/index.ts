@@ -28,6 +28,40 @@ import {
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
+type StorageInitializer = () => Promise<void>;
+
+const CONNECTION_ERROR_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET']);
+
+const DEFAULT_STORAGE_INITIALIZERS: StorageInitializer[] = [
+  ensureChatSchema,
+  ensureSupportSchema,
+  ensureProcessSyncSchema,
+  ensureProcessosIndexes,
+  bootstrapOabMonitoradas,
+  bootstrapIntimacaoOabMonitoradas,
+];
+
+function isDatabaseConnectionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return typeof code === 'string' && CONNECTION_ERROR_CODES.has(code);
+}
+
+export async function initializeStorage(
+  initializers: StorageInitializer[] = DEFAULT_STORAGE_INITIALIZERS,
+): Promise<void> {
+  const results = await Promise.allSettled(initializers.map((initializer) => initializer()));
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      if (isDatabaseConnectionError(result.reason)) {
+        continue;
+      }
+
+      throw result.reason;
+    }
+  }
+}
+
 const ensureCriticalConfig = () => {
   try {
     getAuthSecret();
@@ -328,14 +362,7 @@ if (!hasFrontendBuild) {
 
 async function startServer() {
   try {
-    await Promise.all([
-      ensureChatSchema(),
-      ensureSupportSchema(),
-      ensureProcessSyncSchema(),
-      ensureProcessosIndexes(),
-      bootstrapOabMonitoradas(),
-      bootstrapIntimacaoOabMonitoradas(),
-    ]);
+    await initializeStorage();
   } catch (error) {
     console.error('Failed to initialize application storage schema', error);
     process.exit(1);
@@ -356,4 +383,4 @@ if (process.env.NODE_ENV !== 'test') {
   void startServer();
 }
 
-export { app };
+export { app, startServer };
