@@ -212,7 +212,7 @@ export const listClienteAtributoTipos = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -258,7 +258,7 @@ export const listClienteAtributos = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -318,7 +318,7 @@ export const createClienteAtributo = async (req: Request, res: Response) => {
     res.status(201).json(created);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -393,7 +393,7 @@ export const updateClienteAtributo = async (req: Request, res: Response) => {
     res.json(updated);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -444,6 +444,6 @@ export const deleteClienteAtributo = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

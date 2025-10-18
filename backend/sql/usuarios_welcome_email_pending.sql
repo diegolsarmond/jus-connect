@@ -1,2 +1,0 @@
-ALTER TABLE public.usuarios
-  ADD COLUMN IF NOT EXISTS welcome_email_pending BOOLEAN NOT NULL DEFAULT FALSE;

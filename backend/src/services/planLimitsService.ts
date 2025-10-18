@@ -74,6 +74,11 @@ const toBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
+const parseCount = (value: unknown): number => {
+  const parsed = toInteger(value);
+  return parsed !== null && parsed >= 0 ? parsed : 0;
+};
+
 export const fetchPlanLimitsForCompany = async (
   companyId: number,
 ): Promise<CompanyPlanLimits | null> => {
@@ -132,38 +137,29 @@ export const fetchPlanLimitsForCompany = async (
 
 const RESOURCE_QUERIES: Record<PlanLimitResource, string> = {
   usuarios:
-    'SELECT 1 FROM public.usuarios WHERE empresa IS NOT DISTINCT FROM $1 LIMIT $2',
+    'SELECT COUNT(*)::bigint AS total FROM public.usuarios WHERE empresa IS NOT DISTINCT FROM $1',
   processos:
-    'SELECT 1 FROM public.processos WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
+    'SELECT COUNT(*)::bigint AS total FROM public.processos WHERE idempresa IS NOT DISTINCT FROM $1',
   propostas:
-    'SELECT 1 FROM public.oportunidades WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
+    'SELECT COUNT(*)::bigint AS total FROM public.oportunidades WHERE idempresa IS NOT DISTINCT FROM $1',
   clientes:
-    'SELECT 1 FROM public.clientes WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
+    'SELECT COUNT(*)::bigint AS total FROM public.clientes WHERE idempresa IS NOT DISTINCT FROM $1',
 };
 
 export const countCompanyResource = async (
   companyId: number,
   resource: PlanLimitResource,
-  maxAllowed: number,
 ): Promise<number> => {
   if (!Number.isInteger(companyId) || companyId <= 0) {
     return 0;
   }
 
-  const normalizedLimit = Number.isInteger(maxAllowed) ? Math.trunc(maxAllowed) : 0;
-
-  if (normalizedLimit <= 0) {
-    return 0;
-  }
-
   const query = RESOURCE_QUERIES[resource];
-  const result = await pool.query(query, [companyId, normalizedLimit]);
+  const result = await pool.query<{ total: unknown }>(query, [companyId]);
 
-  const limitedCount = result.rowCount ?? 0;
-
-  if (limitedCount <= 0) {
+  if (result.rowCount === 0) {
     return 0;
   }
 
-  return limitedCount >= normalizedLimit ? normalizedLimit : limitedCount;
+  return parseCount(result.rows[0]?.total);
 };

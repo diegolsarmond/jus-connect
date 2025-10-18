@@ -1,11 +1,54 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
-import { ensureAuthenticatedEmpresaId } from '../middlewares/ensureAuthenticatedEmpresa';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+
+const getAuthenticatedEmpresaId = async (
+  req: Request,
+  res: Response
+): Promise<number | null | undefined> => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return undefined;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return undefined;
+  }
+
+  return empresaLookup.empresaId;
+};
+
+const ensureAuthenticatedEmpresaId = async (
+  req: Request,
+  res: Response
+): Promise<number | undefined> => {
+  const empresaId = await getAuthenticatedEmpresaId(req, res);
+  if (empresaId === undefined) {
+    return undefined;
+  }
+
+  if (empresaId === null) {
+    res
+      .status(400)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    return undefined;
+  }
+
+  return empresaId;
+};
 
 export const listEscritorios = async (req: Request, res: Response) => {
   try {
-    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    const empresaId = await getAuthenticatedEmpresaId(req, res);
     if (empresaId === undefined) {
+      return;
+    }
+
+    if (empresaId === null) {
+      res.json([]);
       return;
     }
 
@@ -25,7 +68,7 @@ export const listEscritorios = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -63,7 +106,7 @@ export const createEscritorio = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -109,7 +152,7 @@ export const updateEscritorio = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -130,7 +173,7 @@ export const deleteEscritorio = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

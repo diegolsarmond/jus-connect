@@ -1,26 +1,14 @@
+import type { TokenPayload } from '../../utils/tokenUtils';
+
 declare global {
   namespace Express {
-    interface SupabaseTokenPayload extends Record<string, unknown> {
-      sub: string;
-      iss?: string;
-      aud?: string | string[];
-      exp?: number;
-      email?: string;
-      name?: string;
-    }
-
     interface Request {
       auth?: {
         userId: number;
         email?: string;
-        payload: SupabaseTokenPayload;
+        payload: TokenPayload;
         modules?: string[];
-        supabaseUserId: string;
       };
-    }
-
-    interface Locals {
-      empresaId?: number;
     }
   }
 }

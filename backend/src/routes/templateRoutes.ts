@@ -7,15 +7,14 @@ import {
   deleteTemplate,
   generateWithAI,
 } from '../controllers/templateController';
-import { ensureAuthenticatedEmpresa } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const router = Router();
 
-router.get('/templates', ensureAuthenticatedEmpresa, listTemplates);
-router.get('/templates/:id', ensureAuthenticatedEmpresa, getTemplate);
-router.post('/templates', ensureAuthenticatedEmpresa, createTemplate);
-router.put('/templates/:id', ensureAuthenticatedEmpresa, updateTemplate);
-router.delete('/templates/:id', ensureAuthenticatedEmpresa, deleteTemplate);
-router.post('/templates/:id/generate', ensureAuthenticatedEmpresa, generateWithAI);
+router.get('/templates', listTemplates);
+router.get('/templates/:id', getTemplate);
+router.post('/templates', createTemplate);
+router.put('/templates/:id', updateTemplate);
+router.delete('/templates/:id', deleteTemplate);
+router.post('/templates/:id/generate', generateWithAI);
 
 export default router;

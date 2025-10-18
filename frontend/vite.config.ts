@@ -24,7 +24,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: normalizeBasePath(env.VITE_APP_BASE_PATH),
-    envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     server: {
       host: "::",
       port: 8080,

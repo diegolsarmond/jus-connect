@@ -1335,7 +1335,7 @@ export const listPlanos = async (_req: Request, res: Response) => {
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1635,7 +1635,7 @@ export const createPlano = async (req: Request, res: Response) => {
     res.status(201).json(payload);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1974,7 +1974,7 @@ export const updatePlano = async (req: Request, res: Response) => {
     res.json(payload);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1991,7 +1991,7 @@ export const deletePlano = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

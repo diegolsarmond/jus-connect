@@ -2,8 +2,6 @@ import crypto from 'crypto';
 import pool from './db';
 import { sendEmail } from './emailService';
 import { buildEmailConfirmationEmail } from './emailConfirmationEmailTemplate';
-import { getSupabaseServiceRoleClient } from './supabaseClient';
-import type { SupabaseServiceRoleClient } from './supabaseClient';
 
 const EMAIL_CONFIRMATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 const DEFAULT_FRONTEND_BASE_URL =
@@ -36,14 +34,9 @@ function buildFrontendBaseUrl(): string {
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
 }
 
-function buildConfirmationRedirectUrl(): string {
+function buildConfirmationLink(rawToken: string): string {
   const baseUrl = buildFrontendBaseUrl();
   const url = new URL(EMAIL_CONFIRMATION_PATH, `${baseUrl}/`);
-  return url.toString();
-}
-
-function buildConfirmationLink(rawToken: string): string {
-  const url = new URL(buildConfirmationRedirectUrl());
   url.searchParams.set('token', rawToken);
   return url.toString();
 }
@@ -54,118 +47,25 @@ function generateToken(): { rawToken: string; tokenHash: string } {
   return { rawToken, tokenHash };
 }
 
-function normalizeEmail(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
+function parseDateValue(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
   }
 
-  const trimmed = value.trim().toLowerCase();
-  return trimmed ? trimmed : null;
-}
-
-async function syncSupabaseUserId(
-  supabaseClient: SupabaseServiceRoleClient,
-  userId: number,
-  email: string,
-  userIdHint?: string | null
-): Promise<void> {
-  const supabaseUserId = userIdHint?.trim();
-
-  if (supabaseUserId) {
-    try {
-      await pool.query(
-        `UPDATE public.usuarios
-            SET supabase_user_id = $2
-          WHERE id = $1
-            AND (supabase_user_id IS DISTINCT FROM $2 OR supabase_user_id IS NULL)`,
-        [userId, supabaseUserId]
-      );
-    } catch (error) {
-      console.error('Falha ao sincronizar identificador do Supabase para o usuário.', error);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
     }
 
-    return;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  const { data, error } = await supabaseClient.auth.admin.listUsers({ email });
-
-  if (error || !data?.users?.length) {
-    return;
-  }
-
-  const matchedUser = data.users.find((entry) => {
-    if (!entry.email) {
-      return false;
-    }
-
-    return entry.email.trim().toLowerCase() === email;
-  });
-
-  if (!matchedUser?.id) {
-    return;
-  }
-
-  try {
-    await pool.query(
-      `UPDATE public.usuarios
-          SET supabase_user_id = $2
-        WHERE id = $1
-          AND (supabase_user_id IS DISTINCT FROM $2 OR supabase_user_id IS NULL)`,
-      [userId, matchedUser.id]
-    );
-  } catch (updateError) {
-    console.error('Falha ao atualizar supabase_user_id após consulta.', updateError);
-  }
+  return null;
 }
 
-async function tryCreateSupabaseEmailConfirmationLink(
-  user: EmailConfirmationTargetUser
-): Promise<string | null> {
-  const supabaseClient = getSupabaseServiceRoleClient();
-
-  if (!supabaseClient) {
-    return null;
-  }
-
-  const normalizedEmail = normalizeEmail(user.email);
-
-  if (!normalizedEmail) {
-    return null;
-  }
-
-  const redirectTo = buildConfirmationRedirectUrl();
-  const { data, error } = await supabaseClient.auth.admin.generateLink({
-    type: 'signup',
-    email: normalizedEmail,
-    redirectTo,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data?.action_link) {
-    return null;
-  }
-
-  await syncSupabaseUserId(supabaseClient, user.id, normalizedEmail, data.user?.id ?? null);
-
-  try {
-    await pool.query(
-      `UPDATE public.email_confirmation_tokens
-          SET used_at = NOW()
-        WHERE user_id = $1
-          AND used_at IS NULL`,
-      [user.id]
-    );
-  } catch (cleanupError) {
-    console.error('Falha ao invalidar tokens antigos de confirmação de e-mail.', cleanupError);
-  }
-
-  return data.action_link;
-}
-
-async function createLegacyEmailConfirmationToken(
+export async function createEmailConfirmationToken(
   user: EmailConfirmationTargetUser
 ): Promise<string> {
   const { rawToken, tokenHash } = generateToken();
@@ -205,40 +105,6 @@ async function createLegacyEmailConfirmationToken(
   }
 
   return confirmationLink;
-}
-
-function parseDateValue(value: unknown): Date | null {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  return null;
-}
-
-export async function createEmailConfirmationToken(
-  user: EmailConfirmationTargetUser
-): Promise<string> {
-  try {
-    const supabaseLink = await tryCreateSupabaseEmailConfirmationLink(user);
-
-    if (supabaseLink) {
-      return supabaseLink;
-    }
-  } catch (error) {
-    console.error('Falha ao gerar link de confirmação de e-mail no Supabase.', error);
-  }
-
-  return createLegacyEmailConfirmationToken(user);
 }
 
 export async function sendEmailConfirmationToken(

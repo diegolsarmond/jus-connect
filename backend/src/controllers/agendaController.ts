@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { DatabaseError, type QueryResult } from 'pg';
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { resolveAuthenticatedEmpresa } from '../utils/authUser';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const VALID_STATUS_NUMBERS = new Set([0, 1, 2, 3]);
 
@@ -150,28 +150,30 @@ const isUndefinedFunctionError = (error: unknown): error is DatabaseError =>
 
 export const listAgendas = async (req: Request, res: Response) => {
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId, userId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
     const functionAttempts: Array<{ functionCall: string; params: Array<number | null> }> = [
       {
         functionCall: 'public.get_api_agendas($1, $2)',
-        params: [empresaId, userId],
+        params: [empresaId, req.auth.userId],
       },
       {
         functionCall: 'public.get_api_agendas($1, $2)',
-        params: [userId, empresaId],
+        params: [req.auth.userId, empresaId],
       },
       {
         functionCall: 'public.get_api_agendas($1)',
@@ -179,7 +181,7 @@ export const listAgendas = async (req: Request, res: Response) => {
       },
       {
         functionCall: 'public.get_api_agendas($1)',
-        params: [userId],
+        params: [req.auth.userId],
       },
     ];
 
@@ -233,31 +235,33 @@ export const listAgendas = async (req: Request, res: Response) => {
           WHERE a.idempresa IS NOT DISTINCT FROM $1
             AND a.idusuario = $2
           ORDER BY a.data, a.hora_inicio`,
-        [empresaId, userId]
+        [empresaId, req.auth.userId]
       );
     }
 
     res.json(queryResult.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const listAgendasByEmpresa = async (req: Request, res: Response) => {
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
     const result = await pool.query(
@@ -293,19 +297,15 @@ export const listAgendasByEmpresa = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
-
-    const { userId } = authResult;
 
     const result = await pool.query(
       `SELECT COUNT(*) AS total_compromissos_hoje
@@ -313,7 +313,7 @@ export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
         WHERE "data" = CURRENT_DATE
           AND status <> 0
           AND idusuario = $1`,
-      [userId]
+      [req.auth.userId]
     );
 
     res.json({
@@ -321,7 +321,7 @@ export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -344,17 +344,21 @@ export const createAgenda = async (req: Request, res: Response) => {
   const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId, userId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
       return res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -397,7 +401,7 @@ export const createAgenda = async (req: Request, res: Response) => {
         lembrete,
         normalizedStatus,
         empresaId,
-        userId,
+        req.auth.userId,
       ]
     );
 
@@ -405,7 +409,7 @@ export const createAgenda = async (req: Request, res: Response) => {
 
     try {
       await createNotification({
-        userId: String(userId),
+        userId: String(req.auth.userId),
         title: `Novo compromisso: ${agenda.titulo}`,
         message: agenda.hora_inicio
           ? `Evento agendado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
@@ -429,7 +433,7 @@ export const createAgenda = async (req: Request, res: Response) => {
     res.status(201).json(agenda);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -453,18 +457,20 @@ export const updateAgenda = async (req: Request, res: Response) => {
   const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId, userId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.status(404).json({ error: 'Agenda não encontrada' });
     }
 
     const result = await pool.query(
@@ -504,7 +510,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
         normalizedStatus,
         id,
         empresaId,
-        userId,
+        req.auth.userId,
       ]
     );
 
@@ -516,7 +522,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
 
     try {
       await createNotification({
-        userId: String(userId),
+        userId: String(req.auth.userId),
         title: `Compromisso atualizado: ${agenda.titulo}`,
         message: agenda.hora_inicio
           ? `Evento atualizado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
@@ -541,25 +547,27 @@ export const updateAgenda = async (req: Request, res: Response) => {
     res.json(agenda);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const deleteAgenda = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId, userId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.status(404).json({ error: 'Agenda não encontrada' });
     }
 
     const result = await pool.query(
@@ -567,7 +575,7 @@ export const deleteAgenda = async (req: Request, res: Response) => {
         WHERE id = $1
           AND idempresa IS NOT DISTINCT FROM $2
           AND (idusuario = $3 OR idusuario IS NULL)`,
-      [id, empresaId, userId]
+      [id, empresaId, req.auth.userId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Agenda não encontrada' });
@@ -575,7 +583,7 @@ export const deleteAgenda = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

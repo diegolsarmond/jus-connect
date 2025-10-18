@@ -4,12 +4,11 @@ import {
   confirmEmail,
   getCurrentUser,
   login,
-  resendEmailConfirmation,
   requestPasswordReset,
   refreshToken,
   register,
 } from '../controllers/authController';
-import supabaseAuthMiddleware from '../middlewares/supabaseAuthMiddleware';
+import { authenticateRequest } from '../middlewares/authMiddleware';
 import createRateLimiter from '../middlewares/rateLimitMiddleware';
 
 const router = Router();
@@ -125,15 +124,13 @@ router.post('/auth/register', sensitiveIpRateLimiter, register);
  */
 router.post('/auth/confirm-email', sensitiveIpRateLimiter, confirmEmail);
 
-router.post('/auth/resend-email-confirmation', sensitiveIpRateLimiter, resendEmailConfirmation);
-
 router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPasswordReset);
 
 /**
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Valida um usuário autenticado via Supabase
+ *     summary: Autentica um usuário e retorna um token Bearer
  *     tags: [Autenticação]
  *     security: []
  *     requestBody:
@@ -143,22 +140,27 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *           schema:
  *             type: object
  *             required:
- *               - supabaseUid
+ *               - email
+ *               - senha
  *             properties:
- *               supabaseUid:
- *                 type: string
- *                 description: Identificador único do usuário no Supabase
  *               email:
  *                 type: string
  *                 format: email
+ *               senha:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Dados do usuário retornados com sucesso
+ *         description: Token de acesso gerado com sucesso
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
+ *                 token:
+ *                   type: string
+ *                 expiresIn:
+ *                   type: integer
+ *                   description: Expiração do token em segundos
  *                 user:
  *                   type: object
  *                   properties:
@@ -170,16 +172,6 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *                       type: string
  *                     perfil:
  *                       type: integer
- *                     modulos:
- *                       type: array
- *                       items:
- *                         type: string
- *                     subscription:
- *                       type: object
- *                     mustChangePassword:
- *                       type: boolean
- *                     viewAllConversations:
- *                       type: boolean
  *       400:
  *         description: Requisição inválida
  *       401:
@@ -232,7 +224,7 @@ router.post('/auth/login', loginRateLimiter, login);
  *       404:
  *         description: Usuário não encontrado
  */
-router.post('/auth/change-password', supabaseAuthMiddleware, changePassword);
+router.post('/auth/change-password', authenticateRequest, changePassword);
 
 /**
  * @swagger
@@ -265,20 +257,32 @@ router.post('/auth/change-password', supabaseAuthMiddleware, changePassword);
  *       404:
  *         description: Usuário não encontrado
  */
-router.get('/auth/me', supabaseAuthMiddleware, getCurrentUser);
+router.get('/auth/me', authenticateRequest, getCurrentUser);
 
 /**
  * @swagger
  * /api/auth/refresh:
  *   post:
- *     summary: Fluxo de renovação local desativado
+ *     summary: Renova o token de acesso do usuário autenticado
  *     tags: [Autenticação]
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       410:
- *         description: Requisição não suportada. Utilize o token fornecido pelo Supabase.
+ *       200:
+ *         description: Novo token de acesso gerado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 expiresIn:
+ *                   type: integer
+ *                   description: Expiração do token em segundos
+ *       401:
+ *         description: Token ausente ou inválido
  */
-router.post('/auth/refresh', supabaseAuthMiddleware, refreshToken);
+router.post('/auth/refresh', authenticateRequest, refreshToken);
 
 export default router;

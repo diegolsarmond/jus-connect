@@ -220,7 +220,7 @@ export async function listConversationsHandler(req: Request, res: Response) {
     res.json(conversations);
   } catch (error) {
     console.error('Failed to list conversations', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -243,7 +243,7 @@ export async function createConversationHandler(req: Request, res: Response) {
         );
     }
     console.error('Failed to create conversation', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -267,7 +267,7 @@ export async function getConversationMessagesHandler(req: Request, res: Response
         );
     }
     console.error('Failed to load messages', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -300,7 +300,7 @@ export async function sendConversationMessageHandler(req: Request, res: Response
         );
     }
     console.error('Failed to record outgoing message', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -327,7 +327,7 @@ export async function updateConversationHandler(req: Request, res: Response) {
         );
     }
     console.error('Failed to update conversation', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -346,7 +346,7 @@ export async function markConversationReadHandler(req: Request, res: Response) {
     }
   } catch (error) {
     console.error('Failed to mark conversation as read', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 

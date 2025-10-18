@@ -21,19 +21,5 @@
 @media (max-width: 900px) {
   .layout {
     flex-direction: column;
-    position: relative;
-  }
-
-  .layout > :last-child {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .layout[data-sidebar-open="false"] {
-    height: 100%;
-  }
-
-  .layout[data-sidebar-open="false"] > :last-child {
-    height: 100%;
   }
 }

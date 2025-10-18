@@ -17,7 +17,6 @@ export interface AsaasIntegration {
   environment: AsaasEnvironment;
   integrationId: number;
   credentialId: number | null;
-  isGlobal: boolean;
 }
 
 export class AsaasIntegrationNotConfiguredError extends Error {
@@ -35,8 +34,6 @@ interface IntegrationRow {
   environment: string | null;
   active: boolean;
   credential_id: number | null;
-  global: unknown;
-  idempresa: unknown;
 }
 
 function resolveBooleanEnv(name: string, fallback: boolean): boolean {
@@ -73,42 +70,12 @@ function assertValidEmpresaId(empresaId: number): asserts empresaId is number {
   }
 }
 
-function isTruthy(value: unknown): boolean {
-  if (value === true) {
-    return true;
-  }
-  if (value === false) {
-    return false;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['true', 't', '1', 'yes', 'y'].includes(normalized)) {
-      return true;
-    }
-    if (['false', 'f', '0', 'no', 'n'].includes(normalized)) {
-      return false;
-    }
-  }
-  if (typeof value === 'number') {
-    if (value === 1) {
-      return true;
-    }
-    if (value === 0) {
-      return false;
-    }
-  }
-  return false;
-}
-
 const PROVIDER_FILTER = 'asaas';
-
-export type IntegrationScopePreference = 'company-first' | 'global-first';
 
 async function findScopedIntegration(
   db: Queryable,
   empresaId: number,
-  environment: AsaasEnvironment | undefined,
-  scope: IntegrationScopePreference,
+  environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
   const params: unknown[] = [PROVIDER_FILTER, empresaId];
   const where: string[] = [
@@ -117,17 +84,12 @@ async function findScopedIntegration(
     'LOWER(TRIM(i.provider)) = $1',
   ];
 
-  const orderClauses =
-    scope === 'global-first'
-      ? ['CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END']
-      : ['CASE WHEN i.idempresa = $2 THEN 0 ELSE 1 END'];
-
   if (environment) {
     params.push(environment);
     where.push('i.environment = $3');
   }
 
-  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
        FROM integration_api_keys i
        LEFT JOIN LATERAL (
          SELECT c.id
@@ -144,7 +106,7 @@ async function findScopedIntegration(
           LIMIT 1
        ) c ON TRUE
        WHERE ${where.join('\n         AND ')}
-       ORDER BY ${orderClauses.join(', ')}, i.updated_at DESC
+       ORDER BY i.updated_at DESC
        LIMIT 20`;
 
   const result = await db.query(query, params);
@@ -171,7 +133,7 @@ async function findLegacyIntegration(
     where.push('i.environment = $3');
   }
 
-  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
          FROM integration_api_keys i
          LEFT JOIN LATERAL (
            SELECT c.id
@@ -202,15 +164,10 @@ async function findLegacyIntegration(
   return row ?? null;
 }
 
-export type ResolveAsaasIntegrationOptions = {
-  scope?: IntegrationScopePreference;
-};
-
 export async function resolveAsaasIntegration(
   empresaId: number,
   db: Queryable = pool,
   environment?: AsaasEnvironment,
-  options?: ResolveAsaasIntegrationOptions,
 ): Promise<AsaasIntegration> {
   assertValidEmpresaId(empresaId);
 
@@ -220,12 +177,10 @@ export async function resolveAsaasIntegration(
     ? normalizeAsaasEnvironment(environment)
     : undefined;
 
-  const scope = options?.scope ?? 'company-first';
-
-  let row = await findScopedIntegration(db, empresaId, normalizedEnvironment, scope);
+  let row = await findScopedIntegration(db, empresaId, normalizedEnvironment);
 
   if (!row && normalizedEnvironment) {
-    row = await findScopedIntegration(db, empresaId, undefined, scope);
+    row = await findScopedIntegration(db, empresaId);
   }
 
   if (!row) {
@@ -257,7 +212,6 @@ export async function resolveAsaasIntegration(
   const resolvedEnvironment = normalizeAsaasEnvironment(row.environment);
   const baseUrl = normalizeAsaasBaseUrl(resolvedEnvironment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
-  const isGlobal = isTruthy(row.global);
 
   const rawCredentialId = row.credential_id as unknown;
   let credentialId: number | null = null;
@@ -277,16 +231,15 @@ export async function resolveAsaasIntegration(
     environment: resolvedEnvironment,
     integrationId: row.id,
     credentialId,
-    isGlobal,
   };
 }
 
-export const createAsaasClient = async (
+export async function createAsaasClient(
   empresaId: number,
   db: Queryable = pool,
   overrides: Partial<Omit<AsaasClientConfig, 'accessToken' | 'baseUrl'>> = {},
   environment?: AsaasEnvironment,
-): Promise<AsaasClient> => {
+): Promise<AsaasClient> {
   const normalizedEnvironment = environment
     ? normalizeAsaasEnvironment(environment)
     : undefined;
@@ -296,20 +249,9 @@ export const createAsaasClient = async (
     accessToken: integration.accessToken,
     ...overrides,
   });
-};
+}
 
 export default resolveAsaasIntegration;
 
 export { ASAAS_DEFAULT_BASE_URLS, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
-
-if (typeof module !== 'undefined') {
-  module.exports = {
-    resolveAsaasIntegration,
-    createAsaasClient,
-    AsaasIntegrationNotConfiguredError,
-    ASAAS_DEFAULT_BASE_URLS,
-    normalizeAsaasBaseUrl,
-    normalizeAsaasEnvironment,
-    default: resolveAsaasIntegration,
-  } satisfies Record<string, unknown>;
-}
+export type { AsaasEnvironment };

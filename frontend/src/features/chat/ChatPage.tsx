@@ -38,7 +38,6 @@ export const ChatPage = () => {
   const [searchValue, setSearchValue] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(
     null,
   );
@@ -225,19 +224,6 @@ export const ChatPage = () => {
 
   const applyConversationUpdate = useCallback(
     (conversation: ConversationSummary) => {
-      if (
-        restrictToAssigned &&
-        currentUserId &&
-        conversation.responsible?.id !== currentUserId
-      ) {
-        setSelectedConversationId((prev) => (prev === conversation.id ? undefined : prev));
-        queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
-          if (!old) return old;
-          return old.filter((item) => item.id !== conversation.id);
-        });
-        return;
-      }
-
       queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
         if (!old) {
           return [conversation];
@@ -246,11 +232,7 @@ export const ChatPage = () => {
         return [conversation, ...filtered];
       });
     },
-    [
-      queryClient,
-      restrictToAssigned,
-      currentUserId,
-    ],
+    [queryClient],
   );
 
   const {
@@ -264,46 +246,10 @@ export const ChatPage = () => {
     updateMessageStatus,
   } = useChatMessages(selectedConversationId);
 
-  useEffect(() => {
-    if (!selectedConversationId) {
-      return;
-    }
-    const conversation = conversations.find((item) => item.id === selectedConversationId);
-    const lastMessage = conversation?.lastMessage;
-    if (!lastMessage) {
-      return;
-    }
-    if (messages.some((message) => message.id === lastMessage.id)) {
-      return;
-    }
-    mergeMessage({
-      id: lastMessage.id,
-      conversationId: selectedConversationId,
-      sender: lastMessage.sender,
-      content: lastMessage.content,
-      timestamp: lastMessage.timestamp,
-      status: lastMessage.status,
-      type: lastMessage.type,
-    });
-  }, [conversations, mergeMessage, messages, selectedConversationId]);
-
   const updateConversationMutation = useMutation({
     mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationPayload }) =>
       updateConversationRequest(conversationId, changes),
     onSuccess: (updated) => {
-      if (
-        restrictToAssigned &&
-        currentUserId &&
-        updated.responsible?.id !== currentUserId
-      ) {
-        setSelectedConversationId((prev) => (prev === updated.id ? undefined : prev));
-        queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
-          if (!old) return old;
-          return old.filter((item) => item.id !== updated.id);
-        });
-        return;
-      }
-
       queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
         if (!old) return old;
         return old.map((item) => (item.id === updated.id ? updated : item));
@@ -462,54 +408,9 @@ export const ChatPage = () => {
     };
   }, [emitTypingState]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(max-width: 900px)");
-    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
-      if ("matches" in event) {
-        if (!event.matches) {
-          setIsSidebarOpen(true);
-        }
-        return;
-      }
-
-      if (!mediaQuery.matches) {
-        setIsSidebarOpen(true);
-      }
-    };
-
-    handleChange(mediaQuery);
-
-    const listener = (event: MediaQueryListEvent) => {
-      if (!event.matches) {
-        setIsSidebarOpen(true);
-      }
-    };
-
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", listener);
-    } else if (typeof mediaQuery.addListener === "function") {
-      mediaQuery.addListener(listener);
-    }
-
-    return () => {
-      if (typeof mediaQuery.removeEventListener === "function") {
-        mediaQuery.removeEventListener("change", listener);
-      } else if (typeof mediaQuery.removeListener === "function") {
-        mediaQuery.removeListener(listener);
-      }
-    };
-  }, []);
-
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
     markReadMutation.mutate(conversationId);
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
-      setIsSidebarOpen(false);
-    }
   };
 
   const handleSendMessage = async (payload: SendMessageInput) => {
@@ -590,16 +491,9 @@ export const ChatPage = () => {
     createConversationMutation.isPending,
   ]);
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen((previous) => !previous);
-  }, []);
-
   return (
     <div className={styles.page}>
-      <div
-        className={styles.layout}
-        data-sidebar-open={isSidebarOpen ? "true" : "false"}
-      >
+      <div className={styles.layout}>
         <ChatSidebar
           conversations={conversations}
           activeConversationId={selectedConversationId}
@@ -613,7 +507,6 @@ export const ChatPage = () => {
           searchInputRef={searchInputRef}
           loading={conversationsQuery.isLoading}
           allowUnassignedFilter={!restrictToAssigned}
-          isOpen={isSidebarOpen}
         />
         <ChatWindow
           conversation={selectedConversation}
@@ -629,8 +522,6 @@ export const ChatPage = () => {
           onTypingActivity={handleTypingActivity}
           responsibleOptions={responsibleOptions}
           isLoadingResponsibles={isLoadingResponsibles}
-          isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={toggleSidebar}
         />
       </div>
       <NewConversationModal

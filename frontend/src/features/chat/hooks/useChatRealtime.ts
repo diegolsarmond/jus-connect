@@ -201,21 +201,7 @@ export const useChatRealtime = (handlers: ChatRealtimeHandlers): UseChatRealtime
           break;
         case "message:status":
           if (data && typeof data === "object") {
-            const payload = data as MessageStatusPayload;
-            handlersRef.current.onMessageStatusUpdated?.(payload);
-            if (typeof window !== "undefined" && window.wahaWebhookStatusUpdate) {
-              const ack =
-                payload.status === "read"
-                  ? "READ"
-                  : payload.status === "delivered"
-                    ? "DELIVERED"
-                    : "SENT";
-              window.wahaWebhookStatusUpdate({
-                chatId: payload.conversationId,
-                messageId: payload.messageId,
-                ack,
-              });
-            }
+            handlersRef.current.onMessageStatusUpdated?.(data as MessageStatusPayload);
           }
           break;
         case "typing":

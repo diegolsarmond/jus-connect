@@ -28,7 +28,6 @@ import { Progress } from "@/components/ui/progress";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
-import { appConfig } from "@/config/app-config";
 
 interface FolderNode {
   id: string;
@@ -101,6 +100,14 @@ const folderTree: FolderNode[] = [
     items: 33,
   },
 ];
+
+const ftpAccess = {
+  host: "ftp.jusconnect.app",
+  port: 21,
+  user: "workspace@jusconnect.app",
+  root: "/cloud/workspaces/justica",
+  secure: true,
+};
 
 const shareLinks: ShareLink[] = [
   {
@@ -243,13 +250,6 @@ export default function MeusArquivos() {
   const [filter, setFilter] = useState<string>("todos");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [activeFolder, setActiveFolder] = useState<string[]>(["Raiz"]);
-  const ftpAccess = appConfig.ftp;
-  const ftpHost = ftpAccess?.host ?? "";
-  const ftpPort = ftpAccess?.port;
-  const ftpUser = ftpAccess?.user ?? "";
-  const ftpRoot = ftpAccess?.root ?? "";
-  const ftpSecure = ftpAccess?.secure ?? false;
-  const hasFtpAccess = Boolean(ftpHost && typeof ftpPort === "number" && ftpUser && ftpRoot);
 
   const breadcrumbs = useMemo(() => {
     return activeFolder.map((segment, index) => ({
@@ -323,57 +323,39 @@ export default function MeusArquivos() {
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Conexão rápida FTP</CardTitle>
-                {hasFtpAccess ? (
-                  <Badge variant={ftpSecure ? "default" : "secondary"} className="gap-1">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    {ftpSecure ? "FTPS ativo" : "FTP"}
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="gap-1">
-                    <Server className="h-3.5 w-3.5" />
-                    Configuração pendente
-                  </Badge>
-                )}
+                <Badge variant={ftpAccess.secure ? "default" : "secondary"} className="gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {ftpAccess.secure ? "FTPS ativo" : "FTP"}
+                </Badge>
               </div>
               <CardDescription>
                 Utilize qualquer cliente FTP para sincronizar grandes volumes de dados com o workspace.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {hasFtpAccess ? (
-                <>
-                  <div className="grid gap-3">
-                    <label className="text-xs font-medium uppercase text-muted-foreground">Servidor</label>
-                    <Input value={`${ftpHost}:${ftpPort ?? ""}`} readOnly className="font-mono text-sm" />
-                  </div>
-                  <div className="grid gap-3">
-                    <label className="text-xs font-medium uppercase text-muted-foreground">Usuário</label>
-                    <Input value={ftpUser} readOnly className="font-mono text-sm" />
-                  </div>
-                  <div className="grid gap-3">
-                    <label className="text-xs font-medium uppercase text-muted-foreground">Diretório raiz</label>
-                    <Input value={ftpRoot} readOnly className="font-mono text-sm" />
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p>As credenciais de FTP não estão configuradas para este workspace.</p>
-                  <p>Defina VITE_FTP_HOST, VITE_FTP_PORT, VITE_FTP_USER e VITE_FTP_ROOT ou contate o administrador.</p>
-                </div>
-              )}
+              <div className="grid gap-3">
+                <label className="text-xs font-medium uppercase text-muted-foreground">Servidor</label>
+                <Input value={`${ftpAccess.host}:${ftpAccess.port}`} readOnly className="font-mono text-sm" />
+              </div>
+              <div className="grid gap-3">
+                <label className="text-xs font-medium uppercase text-muted-foreground">Usuário</label>
+                <Input value={ftpAccess.user} readOnly className="font-mono text-sm" />
+              </div>
+              <div className="grid gap-3">
+                <label className="text-xs font-medium uppercase text-muted-foreground">Diretório raiz</label>
+                <Input value={ftpAccess.root} readOnly className="font-mono text-sm" />
+              </div>
             </CardContent>
-            {hasFtpAccess ? (
-              <CardFooter className="flex flex-wrap items-center justify-between gap-3">
-                <Button size="sm" variant="outline" className="gap-2">
-                  <Copy className="h-4 w-4" />
-                  Copiar credenciais
-                </Button>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Server className="h-3.5 w-3.5" />
-                  Conexão ativa nas últimas 2h
-                </div>
-              </CardFooter>
-            ) : null}
+            <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+              <Button size="sm" variant="outline" className="gap-2">
+                <Copy className="h-4 w-4" />
+                Copiar credenciais
+              </Button>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Server className="h-3.5 w-3.5" />
+                Conexão ativa nas últimas 2h
+              </div>
+            </CardFooter>
           </Card>
 
           <Card>

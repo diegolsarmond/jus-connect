@@ -1,14 +1,9 @@
 import { Router } from 'express';
 import {
   getMyProfile,
-  initiateMyTwoFactor,
-  confirmMyTwoFactor,
-  disableMyTwoFactor,
   listMyAuditLogs,
   listMySessions,
-  approveMyDevice,
   revokeAllMySessions,
-  revokeMyDeviceApproval,
   revokeMySession,
   updateMyProfile,
 } from '../controllers/userProfileController';
@@ -103,13 +98,6 @@ router.get('/me/profile/sessions', listMySessions);
  *         description: Sessão não encontrada
  */
 router.post('/me/profile/sessions/:sessionId/revoke', revokeMySession);
-
-router.post('/me/profile/sessions/:sessionId/approve', approveMyDevice);
-router.post('/me/profile/sessions/:sessionId/revoke-approval', revokeMyDeviceApproval);
-
-router.post('/me/profile/security/2fa/initiate', initiateMyTwoFactor);
-router.post('/me/profile/security/2fa/confirm', confirmMyTwoFactor);
-router.post('/me/profile/security/2fa/disable', disableMyTwoFactor);
 
 /**
  * @swagger

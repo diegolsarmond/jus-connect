@@ -86,54 +86,6 @@ test('ChatService.recordOutgoingMessage persists message and updates conversatio
   assert.equal(message.status, 'sent');
 });
 
-test('ChatService.ensureConversation preserves pinned status when not provided', async () => {
-  const conversationRow = {
-    id: 'conv-keep-pinned',
-    contact_identifier: '5511999990000',
-    contact_name: 'Cliente Fixado',
-    contact_avatar: null,
-    short_status: 'Ativo',
-    description: null,
-    pinned: true,
-    phone_number: null,
-    responsible_id: null,
-    responsible_snapshot: null,
-    tags: [],
-    client_id: null,
-    client_name: null,
-    is_linked_to_client: false,
-    custom_attributes: [],
-    is_private: false,
-    internal_notes: [],
-    unread_count: 0,
-    last_message_id: null,
-    last_message_preview: null,
-    last_message_timestamp: null,
-    last_message_sender: null,
-    last_message_type: null,
-    last_message_status: null,
-    metadata: null,
-    created_at: '2024-01-01T00:00:00.000Z',
-    updated_at: '2024-01-01T00:00:00.000Z',
-  };
-
-  const pool = new FakePool([
-    { rows: [conversationRow], rowCount: 1 },
-  ]);
-
-  const service = new ChatService(pool as any, async () => {});
-
-  const conversation = await service.ensureConversation({
-    contactIdentifier: '5511999990000',
-    contactName: 'Cliente Fixado',
-  });
-
-  const call = pool.calls[0]!;
-  assert.equal(call.values?.[6], null);
-  assert.equal(call.values?.[8], false);
-  assert.equal(conversation.pinned, true);
-});
-
 test('ChatService.getMessages paginates messages in chronological order', async () => {
   const conversationRow = {
     id: 'conv-2',

@@ -1,34 +1,45 @@
 import { Request, Response } from 'express';
-import { resolveAuthenticatedEmpresa } from '../utils/authUser';
-import {
-  findFornecedorById,
-  listFornecedoresByEmpresaId,
-} from '../services/fornecedorRepository';
 import pool from '../services/db';
-import { sanitizeDigits } from '../utils/sanitizeDigits';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+
+const sanitizeDigits = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  return digits.length > 0 ? digits : null;
+};
 
 export const listFornecedores = async (req: Request, res: Response) => {
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
-    const fornecedores = await listFornecedoresByEmpresaId(empresaId);
+    const result = await pool.query(
+      `SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro
+         FROM public.fornecedores
+        WHERE idempresa = $1`,
+      [empresaId]
+    );
 
-    return res.json(fornecedores);
+    return res.json(result.rows);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -36,22 +47,32 @@ export const getFornecedorById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const fornecedor = await findFornecedorById(id, authResult.empresaId);
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
-    if (!fornecedor) {
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const result = await pool.query(
+      `SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro
+         FROM public.fornecedores
+        WHERE id = $1
+          AND idempresa IS NOT DISTINCT FROM $2`,
+      [id, empresaLookup.empresaId]
+    );
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Fornecedor não encontrado' });
     }
 
-    return res.json(fornecedor);
+    return res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -73,17 +94,21 @@ export const createFornecedor = async (req: Request, res: Response) => {
   } = req.body ?? {};
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
       return res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -116,7 +141,7 @@ export const createFornecedor = async (req: Request, res: Response) => {
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -139,17 +164,21 @@ export const updateFornecedor = async (req: Request, res: Response) => {
   } = req.body ?? {};
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
       return res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -202,7 +231,7 @@ export const updateFornecedor = async (req: Request, res: Response) => {
     return res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -210,17 +239,21 @@ export const deleteFornecedor = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const authResult = await resolveAuthenticatedEmpresa(req);
-
-    if (!authResult.success) {
-      return res.status(authResult.status).json({ error: authResult.message });
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const { empresaId } = authResult;
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
       return res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -240,6 +273,6 @@ export const deleteFornecedor = async (req: Request, res: Response) => {
     return res.json({ ativo: result.rows[0].ativo });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };

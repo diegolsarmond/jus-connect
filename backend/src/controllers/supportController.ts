@@ -248,7 +248,7 @@ export async function createSupportRequest(req: Request, res: Response) {
         );
     }
     console.error('Failed to create support request:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -308,7 +308,7 @@ export async function listSupportRequests(req: Request, res: Response) {
         );
     }
     console.error('Failed to list support requests:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -327,7 +327,7 @@ export async function getSupportRequest(req: Request, res: Response) {
     return res.json(request);
   } catch (error) {
     console.error('Failed to fetch support request:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -350,7 +350,7 @@ export async function listSupportRequestMessages(req: Request, res: Response) {
     return res.json({ items: messages });
   } catch (error) {
     console.error('Failed to list support request messages:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -385,7 +385,7 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
         );
     }
     console.error('Failed to parse support message attachments:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 
   const input: CreateSupportMessageInput = {
@@ -430,7 +430,7 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
         );
     }
     console.error('Failed to create support request message:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -454,7 +454,7 @@ export async function downloadSupportRequestAttachment(req: Request, res: Respon
     return sendAttachmentResponse(res, attachment);
   } catch (error) {
     console.error('Failed to download support attachment:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -543,6 +543,6 @@ export async function updateSupportRequest(req: Request, res: Response) {
         );
     }
     console.error('Failed to update support request:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -33,7 +33,7 @@ async function resolveEmpresaId(req: Request, res: Response): Promise<number | n
     return lookup.empresaId;
   } catch (error) {
     console.error('Failed to resolve authenticated user empresa:', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
     return null;
   }
 }
@@ -99,7 +99,7 @@ export async function listIntegrationApiKeys(req: Request, res: Response) {
     return res.json(items);
   } catch (error) {
     console.error('Failed to list integration API keys:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -123,7 +123,7 @@ export async function getIntegrationApiKey(req: Request, res: Response) {
     return res.json(apiKey);
   } catch (error) {
     console.error('Failed to retrieve integration API key:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -181,7 +181,7 @@ export async function createIntegrationApiKey(req: Request, res: Response) {
         );
     }
     console.error('Failed to create integration API key:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -248,7 +248,7 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
         );
     }
     console.error('Failed to update integration API key:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -272,7 +272,7 @@ export async function deleteIntegrationApiKey(req: Request, res: Response) {
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete integration API key:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -308,6 +308,6 @@ export async function validateAsaasIntegration(req: Request, res: Response) {
     }
 
     console.error('Failed to validate Asaas integration API key:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

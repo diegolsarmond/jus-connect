@@ -97,7 +97,7 @@ async function resolveEmpresaId(req: Request, res: Response): Promise<number | n
     return lookup.empresaId;
   } catch (error) {
     console.error('Failed to resolve authenticated user empresa:', error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
     return null;
   }
 }
@@ -272,6 +272,6 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     });
   } catch (error) {
     console.error('Failed to generate AI content:', error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

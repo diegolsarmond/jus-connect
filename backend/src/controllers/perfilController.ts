@@ -5,7 +5,6 @@ import {
   sanitizeModuleIds,
   sortModules,
 } from '../constants/modules';
-import { invalidateAllUserModulesCache } from '../middlewares/moduleAuthorization';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const formatPerfilRow = (row: {
@@ -105,9 +104,7 @@ export const listPerfis = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return res.json([]);
     }
 
     const result = await pool.query(
@@ -130,7 +127,7 @@ export const listPerfis = async (req: Request, res: Response) => {
     res.json(result.rows.map(formatPerfilRow));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -160,7 +157,7 @@ export const createPerfil = async (req: Request, res: Response) => {
 
   if (empresaId === null) {
     return res
-      .status(403)
+      .status(400)
       .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
   }
 
@@ -197,7 +194,6 @@ export const createPerfil = async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
-    invalidateAllUserModulesCache();
 
     const persistedViewAll =
       perfil.view_all_conversations == null
@@ -215,7 +211,7 @@ export const createPerfil = async (req: Request, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }
@@ -266,7 +262,6 @@ export const updatePerfil = async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
-    invalidateAllUserModulesCache();
 
     const updated = result.rows[0] as {
       id: number;
@@ -292,7 +287,7 @@ export const updatePerfil = async (req: Request, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }
@@ -318,13 +313,12 @@ export const deletePerfil = async (req: Request, res: Response) => {
     await client.query('DELETE FROM public.perfis WHERE id = $1', [parsedId]);
 
     await client.query('COMMIT');
-    invalidateAllUserModulesCache();
 
     res.status(204).send();
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }

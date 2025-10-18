@@ -5,7 +5,6 @@ import {
   updateEscritorio,
   deleteEscritorio,
 } from '../controllers/escritorioController';
-import { ensureAuthenticatedEmpresa } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const router = Router();
 
@@ -51,10 +50,10 @@ const router = Router();
 const basePaths = ['/escritorios', '/setores'];
 
 basePaths.forEach((path) => {
-  router.get(path, ensureAuthenticatedEmpresa, listEscritorios);
-  router.post(path, ensureAuthenticatedEmpresa, createEscritorio);
-  router.put(`${path}/:id`, ensureAuthenticatedEmpresa, updateEscritorio);
-  router.delete(`${path}/:id`, ensureAuthenticatedEmpresa, deleteEscritorio);
+  router.get(path, listEscritorios);
+  router.post(path, createEscritorio);
+  router.put(`${path}/:id`, updateEscritorio);
+  router.delete(`${path}/:id`, deleteEscritorio);
 });
 
 /**

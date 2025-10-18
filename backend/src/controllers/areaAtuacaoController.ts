@@ -33,9 +33,7 @@ export const listAreas = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      res.json([]);
       return;
     }
 
@@ -46,7 +44,7 @@ export const listAreas = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -63,7 +61,7 @@ export const getAreaById = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -89,7 +87,7 @@ export const createArea = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       res
-        .status(403)
+        .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
@@ -101,7 +99,7 @@ export const createArea = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -119,7 +117,7 @@ export const updateArea = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -136,7 +134,7 @@ export const deleteArea = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

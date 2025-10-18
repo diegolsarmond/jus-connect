@@ -104,9 +104,7 @@ const resolveEmpresaIdFromRequest = async (
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res
-      .status(403)
-      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    res.status(404).json({ error: 'Oportunidade não encontrada' });
     return { ok: false };
   }
 
@@ -414,9 +412,7 @@ export const listOportunidades = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      res.json([]);
       return;
     }
 
@@ -432,7 +428,7 @@ export const listOportunidades = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -465,7 +461,7 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -513,7 +509,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
     res.json(oportunidade);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -554,7 +550,7 @@ export const listEnvolvidosByOportunidade = async (
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -601,7 +597,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
 
   if (empresaId === null) {
     res
-      .status(403)
+      .status(400)
       .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
@@ -619,11 +615,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
 
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     if (planLimits?.limitePropostas != null) {
-      const propostasCount = await countCompanyResource(
-        empresaId,
-        'propostas',
-        planLimits.limitePropostas,
-      );
+      const propostasCount = await countCompanyResource(empresaId, 'propostas');
       if (propostasCount >= planLimits.limitePropostas) {
         res
           .status(403)
@@ -727,7 +719,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client?.release();
   }
@@ -879,7 +871,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client?.release();
   }
@@ -915,7 +907,7 @@ export const updateOportunidadeStatus = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1062,7 +1054,7 @@ export const linkProcessoToOportunidade = async (req: Request, res: Response) =>
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client?.release();
   }
@@ -1086,7 +1078,7 @@ export const updateOportunidadeEtapa = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1129,7 +1121,7 @@ export const listOportunidadeFaturamentos = async (
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1169,7 +1161,7 @@ export const listOportunidadeParcelas = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1441,7 +1433,7 @@ export const createOportunidadeFaturamento = async (
       console.error('Rollback failed after faturamento creation error.', rollbackError);
     }
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }
@@ -1460,7 +1452,7 @@ export const deleteOportunidade = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro interno do servidor.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

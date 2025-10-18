@@ -1003,7 +1003,7 @@ export const createOpportunityDocumentFromTemplate = async (req: Request, res: R
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1041,7 +1041,7 @@ export const listOpportunityDocuments = async (req: Request, res: Response) => {
     return res.json({ documents });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1082,7 +1082,7 @@ export const getOpportunityDocument = async (req: Request, res: Response) => {
     return res.json(mapDocumentRow(result.rows[0]));
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -1121,7 +1121,7 @@ export const deleteOpportunityDocument = async (req: Request, res: Response) => 
     return res.status(204).send();
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
