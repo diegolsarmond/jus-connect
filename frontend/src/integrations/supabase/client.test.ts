@@ -92,4 +92,20 @@ describe("supabase client", () => {
     expect(listener).toHaveBeenCalledWith("SIGNED_OUT", null);
     expect(localStorage.getItem("jus-connect:supabase:session")).toBeNull();
   });
+
+  it("usa SUPABASE_URL e SUPABASE_ANON_KEY quando disponíveis", async () => {
+    process.env = {
+      ...originalEnv,
+      SUPABASE_URL: "https://fallback.supabase.co",
+      SUPABASE_ANON_KEY: "anon",
+    };
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_ANON_KEY;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    const { supabase } = await import("./client");
+
+    expect(supabase).toBeDefined();
+  });
 });
