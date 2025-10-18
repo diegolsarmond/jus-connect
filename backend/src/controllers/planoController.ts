@@ -1334,6 +1334,15 @@ export const listPlanos = async (_req: Request, res: Response) => {
       return;
     }
 
+    const errorCode =
+      error && typeof error === 'object' ? (error as { code?: string }).code : undefined;
+
+    if (errorCode === 'ECONNREFUSED') {
+      console.error('Banco de dados indisponível ao listar planos.', error);
+      res.status(503).json({ error: 'Banco de dados indisponível.' });
+      return;
+    }
+
     console.error(error);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
