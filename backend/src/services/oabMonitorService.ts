@@ -30,6 +30,9 @@ export interface CompanyOabMonitor {
 
 let ensureTablePromise: Promise<void> | null = null;
 let dependencyWarningLogged = false;
+let connectionWarningLogged = false;
+
+const CONNECTION_ERROR_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET']);
 
 const ensureTable = async (): Promise<void> => {
   if (!ensureTablePromise) {
@@ -271,6 +274,20 @@ export const bootstrapOabMonitoradas = async (): Promise<void> => {
   try {
     await ensureTable();
   } catch (error) {
+    const errno = (error as NodeJS.ErrnoException).code;
+
+    if (errno && CONNECTION_ERROR_CODES.has(errno)) {
+      if (!connectionWarningLogged) {
+        connectionWarningLogged = true;
+        console.warn(
+          'Ignorando a criação da tabela oab_monitoradas: falha ao conectar ao banco de dados.',
+          error,
+        );
+      }
+
+      return;
+    }
+
     if (error instanceof MissingDependencyError) {
       return;
     }
