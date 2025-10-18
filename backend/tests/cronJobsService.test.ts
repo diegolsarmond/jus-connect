@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { CronJobsService } from '../src/services/cronJobs';
+import { PROJUDI_SYNC_JOB_NAME } from '../src/services/projudiSyncRunner';
 
 const createService = () =>
   new CronJobsService(
@@ -33,6 +34,20 @@ test('startProjudiSyncJob ignora erros de conexão ENOTFOUND', async (t) => {
   assert.match(String(warnMock.mock.calls[0]?.arguments?.[0] ?? ''), warningMessageMatchers.projudi);
 
   warnMock.mock.restore();
+});
+
+test('startProjudiSyncJob desabilita o job do Projudi', async () => {
+  const service = createService();
+  const calls: Array<[string, unknown]> = [];
+  (service as unknown as {
+    upsertSyncJobConfigurationFn: (name: string, data: unknown) => Promise<void>;
+  }).upsertSyncJobConfigurationFn = async (name, data) => {
+    calls.push([name, data]);
+  };
+
+  await service.startProjudiSyncJob();
+
+  assert.deepEqual(calls, [[PROJUDI_SYNC_JOB_NAME, { enabled: false }]]);
 });
 
 test('stopProjudiSyncJob ignora erros de conexão ECONNREFUSED', async (t) => {

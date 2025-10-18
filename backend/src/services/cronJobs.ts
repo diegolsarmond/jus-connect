@@ -13,8 +13,6 @@ import {
   ProjudiSyncAlreadyRunningError,
   PROJUDI_SYNC_JOB_NAME,
   resolveProjudiIntervalFromEnv,
-  resolveProjudiLookbackFromEnv,
-  resolveProjudiOverlapFromEnv,
 } from './projudiSyncRunner';
 import {
   executeAsaasSync,
@@ -72,30 +70,7 @@ export class CronJobsService {
   }
 
   async startProjudiSyncJob(): Promise<void> {
-    if (!this.projudiService.hasValidConfiguration()) {
-      await this.stopProjudiSyncJob();
-      return;
-    }
-
-    try {
-      await this.upsertSyncJobConfigurationFn(PROJUDI_SYNC_JOB_NAME, {
-        enabled: true,
-        intervalMs: resolveProjudiIntervalFromEnv(),
-        lookbackMs: resolveProjudiLookbackFromEnv(),
-        overlapMs: resolveProjudiOverlapFromEnv(),
-      });
-    } catch (error) {
-      if (
-        this.handleSyncJobConnectionError(
-          error,
-          'Ignorando a configuração do job de sincronização do Projudi: falha ao conectar ao banco de dados.',
-        )
-      ) {
-        return;
-      }
-
-      throw error;
-    }
+    await this.stopProjudiSyncJob();
   }
 
   async stopProjudiSyncJob(): Promise<void> {
