@@ -50,10 +50,19 @@ export const authenticateRequest = (
       return;
     }
 
+    const supabaseUserId =
+      typeof payload.sub === 'string' ? payload.sub : String(payload.sub);
+
+    const supabasePayload: Express.SupabaseTokenPayload = {
+      ...payload,
+      sub: supabaseUserId,
+    };
+
     req.auth = {
       userId,
       email: typeof payload.email === 'string' ? payload.email : undefined,
-      payload,
+      payload: supabasePayload,
+      supabaseUserId,
     };
 
     next();
