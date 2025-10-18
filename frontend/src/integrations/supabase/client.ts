@@ -197,6 +197,13 @@ const buildHeaders = (token?: string) => {
   return headers;
 };
 
+const clearSession = (event: AuthChangeEvent = "SIGNED_OUT") => {
+  currentSession = null;
+  writeSessionToStorage(null);
+  clearAutoRefresh();
+  notifyListeners(event, null);
+};
+
 const shouldRefreshSession = (session: Session | null) => {
   if (!session?.expires_at) {
     return false;
@@ -221,6 +228,7 @@ async function refreshSession(refreshToken: string | null, silent?: boolean): Pr
     if (!silent) {
       console.warn("Falha ao comunicar com o Supabase", error);
     }
+    clearSession();
     return null;
   }
 
@@ -229,6 +237,7 @@ async function refreshSession(refreshToken: string | null, silent?: boolean): Pr
     if (!silent) {
       console.warn("Falha ao atualizar sessão do Supabase", error);
     }
+    clearSession();
     return null;
   }
 
@@ -291,14 +300,12 @@ const createAuthClient = (): SupabaseLikeClient["auth"] => ({
 
       if (!response.ok) {
         const error = await parseAuthError(response);
+        clearSession();
         return { error };
       }
     }
 
-    currentSession = null;
-    writeSessionToStorage(null);
-    clearAutoRefresh();
-    notifyListeners("SIGNED_OUT", null);
+    clearSession();
     return { error: null };
   },
   async onAuthStateChange(callback) {
