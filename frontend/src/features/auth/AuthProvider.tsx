@@ -11,7 +11,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { getApiBaseUrl } from "@/lib/api";
 import { DEFAULT_TIMEOUT_MS, LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
-import type { Session as SupabaseSession } from "@supabase/supabase-js";
+import type { Session as SupabaseSession } from "@/integrations/supabase/types";
 import { ApiError, fetchCurrentUser, loginRequest } from "./api";
 import { sanitizeModuleList } from "./moduleUtils";
 import type {
